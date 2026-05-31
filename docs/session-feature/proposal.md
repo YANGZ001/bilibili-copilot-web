@@ -1,32 +1,32 @@
 # Session Feature — Proposal
 
-## 背景
+## Background
 
-当前 bilibili-copilot-web 每次对话都是无状态的：用户刷新页面或关闭浏览器后，历史对话内容全部丢失。用户无法回顾之前的总结，也无法在一个视频的基础上继续追问。
+The app is currently stateless: refreshing the page or closing the browser loses all conversation history. Users cannot revisit previous summaries or continue asking follow-up questions about a video.
 
-## 目标
+## Goals
 
-1. 每次对话绑定一个唯一的 Session ID（UUID），持久化存储在服务端
-2. Session ID 体现在 URL 中，用户可以通过保存/分享链接随时回到历史对话
-3. 支持"新建对话"，保留已有 session 的独立访问能力
-4. 在同一浏览器内，提供基于 `device_id` 的历史对话列表入口
+1. Bind each conversation to a unique Session ID (UUID), persisted on the server
+2. Expose the session ID in the URL so users can return to any past conversation via a saved or shared link
+3. Support "New Conversation" while keeping existing sessions independently accessible
+4. Provide a device-scoped history list using `device_id` within the same browser
 
-## 非目标（本次不做）
+## Non-Goals (out of scope)
 
-- 用户账号体系 / 登录认证
-- 跨设备历史同步
-- 对话搜索
-- Session 分享权限控制（任何持有 UUID 的人均可访问）
+- User accounts / authentication
+- Cross-device history sync
+- Conversation search
+- Session sharing permissions (anyone with the UUID can access — by design)
 
-## 设计原则
+## Design Principles
 
-- **简单优先**：个人使用场景，不引入不必要的复杂度
-- **数据驱动 UI**：前端页面状态完全由 session 数据决定，新建和恢复走同一套渲染逻辑
-- **零依赖部署**：使用 SQLite，不新增额外服务容器
+- **Simplicity first**: Personal-use product; avoid unnecessary complexity
+- **Data-driven UI**: Page state is entirely derived from session data; new and restored sessions share the same rendering path
+- **Zero-dependency deployment**: Use SQLite — no extra service containers
 
-## 约束
+## Constraints
 
-- Session 有效期：14 天（以最后访问时间计算）
-- 并发：个人使用，不考虑高并发
-- 部署环境：Docker on Ubuntu，通过 Tailscale 内网访问
-- 存储：SQLite，`.db` 文件挂载在 Docker volume 中
+- Session TTL: 14 days from last access
+- Concurrency: Personal use only; no concurrent-access handling needed
+- Deploy target: Docker on Ubuntu, accessed via Tailscale private network
+- Storage: SQLite, `.db` file mounted via Docker volume

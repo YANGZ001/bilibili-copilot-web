@@ -1,76 +1,76 @@
 # Session Feature — Technical Design
 
-## 数据模型
+## Data Model
 
-### `sessions` 表
+### `sessions` table
 
-| 字段 | 类型 | 说明 |
+| Field | Type | Description |
 |---|---|---|
-| `session_id` | TEXT (UUID) | 主键，出现在 URL 中 |
-| `device_id` | TEXT (UUID) | 来自客户端 localStorage，标识浏览器 |
-| `video_id` | TEXT | Bilibili 视频 ID，如 `BV1VMR4BNEYq` |
-| `video_title` | TEXT | 视频标题，用于历史列表展示 |
-| `conversation_type` | TEXT | 枚举：`summarize` / `chat` / … |
-| `created_at` | INTEGER | Unix 时间戳（毫秒） |
-| `last_accessed_at` | INTEGER | Unix 时间戳（毫秒），用于过期判断 |
+| `session_id` | TEXT (UUID) | Primary key; appears in the URL |
+| `device_id` | TEXT (UUID) | From client `localStorage`; identifies the browser |
+| `video_id` | TEXT | Bilibili video ID, e.g. `BV1VMR4BNEYq` |
+| `video_title` | TEXT | Video title; shown in the history list |
+| `conversation_type` | TEXT | Enum: `summarize` / `chat` / … |
+| `created_at` | INTEGER | Unix timestamp (ms) |
+| `last_accessed_at` | INTEGER | Unix timestamp (ms); used for TTL check |
 
-### `messages` 表
+### `messages` table
 
-| 字段 | 类型 | 说明 |
+| Field | Type | Description |
 |---|---|---|
-| `id` | INTEGER | 自增主键 |
-| `session_id` | TEXT | 外键 → `sessions.session_id` |
+| `id` | INTEGER | Auto-increment primary key |
+| `session_id` | TEXT | Foreign key → `sessions.session_id` |
 | `role` | TEXT | `"system"` / `"user"` / `"assistant"` |
-| `content` | TEXT | 消息内容（Markdown 或纯文本） |
-| `created_at` | INTEGER | Unix 时间戳（毫秒） |
+| `content` | TEXT | Message content (Markdown or plain text) |
+| `created_at` | INTEGER | Unix timestamp (ms) |
 
-> **关于 `system` 消息**：第一次提交时，包含视频字幕/transcript 的完整 prompt 以 `role: "system"` 存入 messages 表。恢复 session 时直接读取所有消息、按 `created_at` 排序后传给 LLM，保证上下文完整。
-
----
-
-## Session 生命周期
-
-```
-用户进入 /
-    │
-    ├─ URL 有 ?session=uuid ──→ 从 DB 加载 session ──→ 渲染历史对话
-    │
-    └─ URL 无参数 ──────────→ 显示空白输入表单
-                                    │
-                              用户填写并提交
-                                    │
-                              POST /api/sessions
-                                    │
-                              服务端生成 UUID、写入 DB
-                                    │
-                              返回 session_id
-                                    │
-                              前端跳转 /?session=uuid
-```
-
-### 过期处理
-
-- 每次成功访问 session 时，更新 `last_accessed_at`
-- 服务端检查：若 `now - last_accessed_at > 14天`，返回 410 Gone
-- 前端收到 410 时，展示"该对话已过期"提示，并提供"新建对话"按钮
+> **On `system` messages**: When a session is first submitted, the full prompt (including the video transcript) is stored as `role: "system"`. On session restore, all messages are loaded ordered by `created_at` and passed directly to the LLM — preserving full context with no extra work.
 
 ---
 
-## API 设计
+## Session Lifecycle
+
+```
+User visits /
+    │
+    ├─ URL has ?session=uuid ──→ Load session from DB ──→ Render conversation history
+    │
+    └─ No URL param ──────────→ Show empty input form
+                                      │
+                                User fills in and submits
+                                      │
+                                POST /api/sessions
+                                      │
+                                Server generates UUID, writes to DB
+                                      │
+                                Returns session_id
+                                      │
+                                Client navigates to /?session=uuid
+```
+
+### Expiry Handling
+
+- Update `last_accessed_at` on every successful session access
+- Server: if `now - last_accessed_at > 14 days`, return `410 Gone`
+- Client: on 410, show "This conversation has expired" message with a "New Conversation" button
+
+---
+
+## API Design
 
 ### `POST /api/sessions`
-创建新 session（首次提交时调用）
+Create a new session (called on first form submission)
 
 **Request body**
 ```json
 {
   "device_id": "uuid-from-localstorage",
   "video_id": "BV1VMR4BNEYq",
-  "video_title": "视频标题",
+  "video_title": "Video title",
   "conversation_type": "summarize",
   "initial_message": {
     "role": "system",
-    "content": "你是...（含 transcript 的完整 prompt）"
+    "content": "You are … (full prompt including transcript)"
   }
 }
 ```
@@ -85,20 +85,20 @@
 ---
 
 ### `GET /api/sessions/:session_id`
-加载 session 元信息 + 所有消息
+Load session metadata + all messages
 
 **Response**
 ```json
 {
   "session_id": "uuid-xxx",
   "video_id": "BV1VMR4BNEYq",
-  "video_title": "视频标题",
+  "video_title": "Video title",
   "conversation_type": "summarize",
   "created_at": 1748700000000,
   "messages": [
     { "role": "system", "content": "..." },
-    { "role": "user", "content": "帮我总结" },
-    { "role": "assistant", "content": "## 总结\n..." }
+    { "role": "user", "content": "Summarize this video" },
+    { "role": "assistant", "content": "## Summary\n..." }
   ]
 }
 ```
@@ -106,29 +106,29 @@
 ---
 
 ### `POST /api/sessions/:session_id/messages`
-追加新一轮对话（用户追问时调用）
+Append a follow-up turn (called when user asks a follow-up question)
 
 **Request body**
 ```json
 {
   "role": "user",
-  "content": "能详细说说第三点吗？"
+  "content": "Can you elaborate on point 3?"
 }
 ```
 
-**Response**：流式返回 assistant 回复（SSE / ReadableStream），完成后服务端写入 DB
+**Response**: Streaming assistant reply (SSE / ReadableStream). After the stream ends, both the user and assistant messages are written to DB.
 
 ---
 
 ### `GET /api/sessions?device_id=xxx`
-获取历史对话列表（历史面板用）
+List history sessions for a device (used by the history panel)
 
 **Response**
 ```json
 [
   {
     "session_id": "uuid-xxx",
-    "video_title": "Vue3 核心原理",
+    "video_title": "Vue 3 Core Internals",
     "conversation_type": "summarize",
     "created_at": 1748700000000,
     "last_accessed_at": 1748800000000
@@ -138,20 +138,20 @@
 
 ---
 
-## 前端状态设计
+## Frontend State Design
 
 ```
 URL /?session=uuid  →  useSession(session_id) hook
                               │
-                    session 为 null  →  显示输入表单
+                    session is null  →  Show input form
                               │
-                    session 有数据  →  显示对话界面
-                                           ├── video_id / 标题 (只读)
-                                           ├── 历史消息列表
-                                           └── 追问输入框
+                    session has data  →  Show conversation UI
+                                            ├── video_id / title (read-only)
+                                            ├── Message history list
+                                            └── Follow-up input box
 ```
 
-### device_id 管理
+### device_id Management
 
 ```typescript
 // lib/device.ts
@@ -168,44 +168,44 @@ export function getOrCreateDeviceId(): string {
 
 ---
 
-## 存储
+## Storage
 
-- **引擎**：SQLite（`better-sqlite3`）
-- **文件路径**：`/data/chat.db`（Docker volume 挂载）
-- **迁移管理**：手写 SQL 初始化脚本（`lib/db/schema.sql`），启动时检查并执行
+- **Engine**: SQLite (`better-sqlite3`)
+- **File path**: `/data/chat.db` (mounted via Docker volume)
+- **Migration**: Hand-written SQL init script (`lib/db/schema.sql`); executed automatically on startup
 
-### Docker volume 配置
+### Docker volume config
 
 ```yaml
-# docker-compose.yml 新增
+# Add to docker-compose.yml
 volumes:
   - ./data:/data
 ```
 
 ---
 
-## 目录结构变更（新增部分）
+## Directory Structure (new additions)
 
 ```
 lib/
   db/
-    index.ts          # SQLite 连接单例
-    schema.sql        # 建表语句
+    index.ts          # SQLite connection singleton
+    schema.sql        # CREATE TABLE statements
     sessions.ts       # session CRUD
     messages.ts       # messages CRUD
-  device.ts           # getOrCreateDeviceId() 工具函数
+  device.ts           # getOrCreateDeviceId() utility
 
 hooks/
-  useSession.ts       # 读取 URL ?session= 参数并加载 session 数据
+  useSession.ts       # Reads ?session= from URL and loads session data
 
 app/api/
   sessions/
-    route.ts          # GET /api/sessions?device_id=xxx（历史列表）
-                      # POST /api/sessions（创建新 session）
-                      # 注意：Next.js App Router 中，同一个 route.ts
-                      # 用具名导出 export async function GET / POST 区分方法
+    route.ts          # GET /api/sessions?device_id=xxx (history list)
+                      # POST /api/sessions (create new session)
+                      # Note: Next.js App Router uses named exports
+                      # (export async function GET / POST) in the same route.ts
     [id]/
-      route.ts        # GET /api/sessions/[id]（读取 session + messages）
+      route.ts        # GET /api/sessions/[id] (load session + messages)
       messages/
-        route.ts      # POST /api/sessions/[id]/messages（追问，流式响应）
+        route.ts      # POST /api/sessions/[id]/messages (follow-up, streaming)
 ```

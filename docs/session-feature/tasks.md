@@ -1,79 +1,79 @@
 # Session Feature — Tasks
 
-## Phase 1：基础设施（存储层）
+## Phase 1: Infrastructure (Storage Layer)
 
-- [ ] 安装依赖：`better-sqlite3` 及其 TypeScript 类型
-- [ ] 创建 `lib/db/schema.sql`：定义 `sessions` 和 `messages` 两张表
-- [ ] 创建 `lib/db/index.ts`：SQLite 连接单例，应用启动时自动执行 schema 初始化
-- [ ] 创建 `lib/db/sessions.ts`：CRUD 操作
+- [ ] Install dependencies: `better-sqlite3` and its TypeScript types (`@types/better-sqlite3`)
+- [ ] Create `lib/db/schema.sql`: define `sessions` and `messages` tables
+- [ ] Create `lib/db/index.ts`: SQLite connection singleton; auto-runs schema init on startup
+- [ ] Create `lib/db/sessions.ts`: CRUD operations
   - `createSession(data)`
   - `getSession(session_id)`
   - `updateLastAccessed(session_id)`
   - `listSessionsByDevice(device_id)`
   - `isExpired(session)`
-- [ ] 创建 `lib/db/messages.ts`：CRUD 操作
+- [ ] Create `lib/db/messages.ts`: CRUD operations
   - `appendMessage(session_id, role, content)`
   - `getMessages(session_id)`
-- [ ] 更新 `docker-compose.yml`：挂载 `./data:/data` volume
-- [ ] 更新 `Dockerfile`：
-  - runner 阶段必须显式创建 `/data` 目录：`RUN mkdir -p /data`
-  - `better-sqlite3` 是原生 addon，需要在 builder 阶段编译。确保 `node_modules` 在 runner 阶段完整复制，不要仅复制 production dependencies，否则原生 addon `.node` 文件会丢失
+- [ ] Update `docker-compose.yml`: mount `./data:/data` volume
+- [ ] Update `Dockerfile`:
+  - runner stage must explicitly create `/data`: `RUN mkdir -p /data`
+  - `better-sqlite3` is a native addon compiled in the builder stage. Copy `node_modules` in full to the runner stage — do NOT copy only production deps, or the native `.node` file will be missing
 
 ---
 
-## Phase 2：API 层
+## Phase 2: API Layer
 
 - [ ] `POST /api/sessions`
-  - 接收 `device_id`、`video_id`、`video_title`、`conversation_type`、`initial_message`
-  - 生成 UUID，写入 `sessions` 和第一条 `system` message
-  - 返回 `{ session_id }`
+  - Accept `device_id`, `video_id`, `video_title`, `conversation_type`, `initial_message`
+  - Generate UUID, write to `sessions` and insert first `system` message
+  - Return `{ session_id }`
 - [ ] `GET /api/sessions/[id]`
-  - 查询 session + 所有 messages
-  - 若 session 不存在返回 404；若已过期返回 410
-  - 更新 `last_accessed_at`
+  - Query session + all messages
+  - Return 404 if not found; 410 if expired
+  - Update `last_accessed_at` on success
 - [ ] `POST /api/sessions/[id]/messages`
-  - 接收用户新消息
-  - 从 DB 读取完整 messages 历史，调用 LLM（流式）
-  - 流结束后将 user + assistant 消息写入 DB
-  - 返回流式响应
+  - Accept user message
+  - Load full message history from DB, call LLM (streaming)
+  - After stream ends, write both user + assistant messages to DB
+  - Return streaming response
 - [ ] `GET /api/sessions?device_id=xxx`
-  - 返回该 device 下所有未过期 session 的元信息列表，按 `last_accessed_at` 降序
+  - Return all non-expired sessions for the device, ordered by `last_accessed_at` DESC
 
 ---
 
-## Phase 3：前端集成
+## Phase 3: Frontend Integration
 
-- [ ] 创建 `lib/device.ts`：`getOrCreateDeviceId()` 工具函数
-- [ ] 创建 `hooks/useSession.ts`：
-  - 读取 URL 中的 `?session=` 参数
-  - 若有，调用 `GET /api/sessions/[id]` 加载数据
-  - 若无，返回空 session 状态（显示表单）
-- [ ] 修改首页 `app/page.tsx`：
-  - 接入 `useSession` hook
-  - 根据 session 状态决定渲染表单还是对话界面
-  - 表单提交时调用 `POST /api/sessions`，拿到 `session_id` 后更新 URL（`router.push`）
-- [ ] 修改 `VideoChat` 组件：
-  - messages 不再本地管理，改为通过 props 接收（初始化时从 `useSession` 传入）
-  - 追问时调用 `POST /api/sessions/[id]/messages` 而非现有 `/api/chat`
-  - 支持流式渲染 assistant 回复
-  - **重要**：`subtitleText` 目前是通过 props 传入的。新建 session 时这个值来自 `page.tsx` 的状态；恢复 session 时需要从 messages 的第一条 `role: "system"` 的 `content` 里提取出来（已含 transcript）。建议将这个逆向解析逻辑封装在 `useSession` hook 中返回 `subtitleText` 字段
-- [ ] 添加"新建对话"按钮：清空 URL 参数（`router.push('/')`）
-- [ ] 处理 410 过期状态：展示提示 + 新建按钮
-
----
-
-## Phase 4：历史列表（可推迟）
-
-- [ ] 创建历史侧边栏/下拉组件，展示格式：`时间 · 类型 · 视频标题`
-- [ ] 接入 `GET /api/sessions?device_id=xxx`
-- [ ] 点击历史记录项 → 跳转至对应 session URL
+- [ ] Create `lib/device.ts`: `getOrCreateDeviceId()` utility
+- [ ] Create `hooks/useSession.ts`:
+  - Read `?session=` param from URL
+  - If present, call `GET /api/sessions/[id]` to load data
+  - If absent, return empty session state (show form)
+- [ ] Update `app/page.tsx`:
+  - Wire up `useSession` hook
+  - Render form or conversation UI based on session state
+  - On form submit, call `POST /api/sessions`, then navigate to `/?session=uuid` (`router.push`)
+- [ ] Update `VideoChat` component:
+  - messages are no longer managed locally; receive them via props (initialized from `useSession`)
+  - Follow-up calls go to `POST /api/sessions/[id]/messages` instead of existing `/api/chat`
+  - Support streaming assistant reply rendering
+  - **Important**: `subtitleText` is currently passed as a prop. For new sessions it comes from `page.tsx` state; for restored sessions it must be extracted from the first `role: "system"` message's `content` (which contains the transcript). Encapsulate this extraction in the `useSession` hook and expose it as a `subtitleText` field.
+- [ ] Add "New Conversation" button: navigate to `/` (`router.push('/')`)
+- [ ] Handle 410 expired state: show user-friendly message + New Conversation button
 
 ---
 
-## 验收标准
+## Phase 4: History List (deferrable)
 
-- [ ] 用户提交后，URL 变为 `/?session=uuid`，刷新页面后对话内容完整恢复
-- [ ] 恢复 session 后，用户可继续追问，LLM 能理解视频上下文
-- [ ] 点击"新建对话"，URL 回到 `/`，表单重置
-- [ ] 访问过期 session URL，展示友好提示
-- [ ] `.db` 文件在 Docker 重启后数据不丢失
+- [ ] Create a history sidebar / dropdown component; display format: `date · type · video title`
+- [ ] Wire up `GET /api/sessions?device_id=xxx`
+- [ ] Clicking a history item navigates to its session URL
+
+---
+
+## Acceptance Criteria
+
+- [ ] After submission, URL becomes `/?session=uuid`; refreshing fully restores the conversation
+- [ ] On session restore, user can continue asking follow-ups and LLM understands video context
+- [ ] Clicking "New Conversation" returns to `/` with a reset form
+- [ ] Accessing an expired session URL shows a friendly expiry message
+- [ ] `.db` file persists across Docker restarts

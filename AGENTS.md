@@ -6,89 +6,89 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 ---
 
-# 项目开发规范
+# Project Development Standards
 
-## 功能设计流程（Feature Development Workflow）
+## Feature Development Workflow
 
-每个新功能在动手写代码之前，必须先完成设计阶段。文档统一存放在 `docs/<feature-name>/` 目录下，包含三个文件：
+Every new feature must go through a design phase before any code is written. Docs live under `docs/<feature-name>/` and contain three files:
 
 ```
 docs/
   <feature-name>/
-    proposal.md   # 背景、目标、非目标、设计原则
-    design.md     # 数据模型、API 设计、前端状态、目录结构变更
-    tasks.md      # 分 Phase 的任务清单 + 验收标准
+    proposal.md   # Background, goals, non-goals, design principles
+    design.md     # Data model, API design, frontend state, directory changes
+    tasks.md      # Phased task checklist + acceptance criteria
 ```
 
-### proposal.md 应包含
+### proposal.md must include
 
-- **背景**：当前存在什么问题
-- **目标**：本次要实现什么
-- **非目标**：明确说明本次不做什么，防止范围蔓延
-- **设计原则**：核心决策依据（如"简单优先"、"数据驱动 UI"）
-- **约束**：部署环境、性能要求、兼容性等
+- **Background**: What problem exists today
+- **Goals**: What this feature will deliver
+- **Non-Goals**: Explicitly what is out of scope (prevents scope creep)
+- **Design Principles**: Key decision rationale (e.g. "simplicity first", "data-driven UI")
+- **Constraints**: Deploy environment, performance requirements, compatibility
 
-### design.md 应包含
+### design.md must include
 
-- **数据模型**：表结构（字段、类型、说明），明确关系型 vs 文档型
-- **核心流程**：用文字 + ASCII 流程图描述主要场景
-- **API 设计**：每个 endpoint 的 method、path、request body、response
-- **前端状态设计**：state 结构、数据流向、hook 职责
-- **存储选型**：说明选型理由
-- **目录结构变更**：新增/修改的文件列表
+- **Data model**: Table schema (fields, types, descriptions); relational vs document distinction
+- **Core flow**: Key scenarios described in prose + ASCII diagrams
+- **API design**: Method, path, request body, response for every endpoint
+- **Frontend state**: State shape, data flow, hook responsibilities
+- **Storage rationale**: Why this storage engine was chosen
+- **Directory changes**: List of new/modified files
 
-### tasks.md 应包含
+### tasks.md must include
 
-- 按 Phase 拆分任务（Phase 1 = 基础设施，Phase 2 = API 层，Phase 3 = 前端集成，Phase 4+ = 可推迟功能）
-- 每条任务使用 `- [ ]` checkbox 格式，便于跟踪进度
-- 末尾必须有**验收标准**，以用户可观察的行为来描述
+- Tasks split by Phase (Phase 1 = infrastructure, Phase 2 = API layer, Phase 3 = frontend integration, Phase 4+ = deferrable)
+- Each task as a `- [ ]` checkbox for progress tracking
+- **Acceptance criteria** at the end, expressed as observable user-facing behaviors
 
 ---
 
-## 技术栈约定
+## Tech Stack
 
-| 层级 | 技术 | 备注 |
+| Layer | Technology | Notes |
 |---|---|---|
-| 框架 | Next.js (App Router) | 读 `node_modules/next/dist/docs/` 再写代码 |
-| 语言 | TypeScript | 严格类型，不用 `any` |
-| 样式 | Tailwind CSS | 已配置，直接使用 |
-| 数据库 | SQLite (`better-sqlite3`) | 个人使用场景，零外部依赖 |
-| 部署 | Docker + docker-compose | 挂载 volume 持久化数据 |
-| 网络 | Tailscale 内网 | 无需公网鉴权 |
+| Framework | Next.js (App Router) | Read `node_modules/next/dist/docs/` before writing code |
+| Language | TypeScript | Strict types; no `any` |
+| Styling | Tailwind CSS | Already configured |
+| Database | SQLite (`better-sqlite3`) | Personal-use; zero external dependencies |
+| Deploy | Docker + docker-compose | Volume mount for data persistence |
+| Network | Tailscale private network | No public auth needed |
 
 ---
 
-## 数据库规范
+## Database Conventions
 
-- 使用 SQLite，`.db` 文件存放在 `/data/chat.db`，通过 Docker volume 持久化
-- 连接单例放在 `lib/db/index.ts`，应用启动时自动执行 `lib/db/schema.sql`
-- 数据访问函数按实体拆分：`lib/db/sessions.ts`、`lib/db/messages.ts` 等
-- 禁止在 API route 中直接写 SQL，必须通过 `lib/db/*.ts` 封装
-
----
-
-## API 设计规范
-
-- 路由遵循 RESTful 风格：`/api/sessions`、`/api/sessions/[id]/messages`
-- 所有 API route 文件必须包含 `export const runtime = 'nodejs'`（SQLite 需要）
-- 错误响应统一格式：`{ error: string }`，状态码语义准确（404 / 410 / 500）
-- 流式响应使用 `ReadableStream`，`Content-Type: text/event-stream`
+- Use SQLite; `.db` file at `/data/chat.db`, persisted via Docker volume
+- Connection singleton in `lib/db/index.ts`; auto-runs `lib/db/schema.sql` on startup
+- Data access split by entity: `lib/db/sessions.ts`, `lib/db/messages.ts`, etc.
+- Never write raw SQL directly in API route files — always go through `lib/db/*.ts`
 
 ---
 
-## 前端规范
+## API Conventions
 
-- **数据驱动 UI**：组件只关心"数据是什么"，不关心"数据从哪来"（新建 vs 恢复走同一套渲染逻辑）
-- **URL 是唯一状态来源**：session 状态通过 URL query param 传递，不存在全局 store
-- **device_id** 通过 `lib/device.ts` 的 `getOrCreateDeviceId()` 统一管理，存在 `localStorage`
-- Hook 职责单一：`useSession(id)` 只负责加载和缓存 session 数据，不包含业务逻辑
+- RESTful routes: `/api/sessions`, `/api/sessions/[id]/messages`
+- All API route files must include `export const runtime = 'nodejs'` (required for SQLite)
+- Error response format: `{ error: string }` with semantically correct status codes (404 / 410 / 500)
+- Streaming responses use `ReadableStream` with `Content-Type: text/event-stream`
 
 ---
 
-## Dockerfile 注意事项
+## Frontend Conventions
 
-- 使用多阶段构建（builder + runner）
-- `better-sqlite3` 是原生 addon，需要在 builder 阶段编译，并在 runner 阶段正确复制 `node_modules`
-- `/data` 目录需要在 runner 阶段显式创建：`RUN mkdir -p /data`
-- docker-compose 挂载：`./data:/data`
+- **Data-driven UI**: Components care only about *what the data is*, not *where it came from* (new and restored sessions share the same render path)
+- **URL as single source of truth**: Session state flows through URL query params; no global store
+- **device_id** managed exclusively via `getOrCreateDeviceId()` in `lib/device.ts`; stored in `localStorage`
+- Hooks have single responsibility: `useSession(id)` only loads and caches session data — no business logic
+
+---
+
+## Dockerfile Notes
+
+- Use multi-stage builds (builder + runner)
+- `better-sqlite3` is a native addon; it must be compiled in the builder stage and `node_modules` must be copied in full to the runner stage — do NOT prune to production-only deps or the `.node` file will be missing
+- Explicitly create `/data` in the runner stage: `RUN mkdir -p /data`
+- docker-compose volume: `./data:/data`
 
