@@ -10,17 +10,21 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 ## Feature Development Workflow
 
-Every new feature must go through a design phase before any code is written. Docs live under `docs/<feature-name>/` and contain five files. Use `docs/session-feature/` as the canonical reference:
+Every new feature must go through a design phase before any code is written. Docs live under `docs/<feature-name>/` and contain five files. Use `docs/archive/session-feature/` as the canonical reference:
 
 ```
 docs/
-  <feature-name>/
+  <feature-name>/          # active — in progress
     proposal.md   # Background, goals, non-goals, design principles
     design.md     # Data model, API design, frontend state, directory changes
     tasks.md      # Phased task checklist + acceptance criteria
     context.md    # Running log of decisions, blockers, and open questions
     test_plan.md  # Manual + automated test scenarios, edge cases, acceptance checks
+  archive/
+    <feature-name>/        # completed and verified features
 ```
+
+When all acceptance criteria are met and verified, move the feature folder to `docs/archive/`.
 
 ### proposal.md must include
 
