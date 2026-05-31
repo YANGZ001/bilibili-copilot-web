@@ -67,11 +67,12 @@
 
 ---
 
-## Phase 4: History List (deferrable)
+## Phase 4: History List
 
-- [ ] Create a history sidebar / dropdown component; display format: `date · type · video title`
-- [ ] Wire up `GET /api/sessions?device_id=xxx`
-- [ ] Clicking a history item navigates to its session URL
+- [x] Create `components/SessionHistory.tsx`; display format: `date · type · video title`
+- [x] Wire up `GET /api/sessions?device_id=xxx`
+- [x] Clicking a history item navigates to its session URL
+- [x] Rendered in `HomeClient` on the home page when no active session
 
 ---
 

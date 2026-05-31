@@ -135,6 +135,28 @@ for r in c.execute('SELECT id, role, substr(content,1,80) FROM messages ORDER BY
 
 ---
 
+### T8 — History list ✅ API verified (2026-05-31)
+
+**Steps:**
+1. Open `/` — confirm history list is shown below the input form
+2. Verify each row shows: `date · template badge · video title`
+3. Click a history item
+
+**Expected:**
+- List renders sessions ordered by `last_accessed_at DESC`
+- Clicking navigates to `/?session=<uuid>` and restores that session
+- List is absent when a session is active (content section shown)
+
+**API verification (2026-05-31):**
+```bash
+DEVICE_ID="<from-db>"
+curl "http://localhost:3000/api/sessions?device_id=$DEVICE_ID"
+# Returns 6 sessions with correct video_title and conversation_type fields
+```
+`GET /api/sessions?device_id=xxx` → 6 sessions returned in correct order with all required fields.
+
+---
+
 ## Edge Cases & Probes ✅ all verified (2025-05-31)
 
 | Probe | Input | Result |
@@ -154,10 +176,11 @@ for r in c.execute('SELECT id, role, substr(content,1,80) FROM messages ORDER BY
 - [x] T4: "New Conversation" returns to `/` with a reset form *(verified by user)*
 - [x] T5: Expired session URL shows a friendly expiry message *(API verified)*
 - [x] T6: `.db` file persists across Docker restarts *(verified)*
+- [x] T8: History list shows past sessions; clicking navigates to session URL *(API verified 2026-05-31)*
 
 ---
 
 ## Known Issues / Notes
 
-- Port 3000 may already be in use when running `npm run dev`; server will silently bind to the next available port (e.g. 3001). Check terminal output.
 - `sqlite3` CLI not installed in this environment — use the Python `sqlite3` module instead for DB inspection.
+- Always use `docker compose up --build` — never `npm run dev`.

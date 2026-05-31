@@ -9,7 +9,7 @@ Use this file to resume work after any interruption. It tracks current state, ke
 **Phase 1 (Infrastructure)**: ✅ Complete
 **Phase 2 (API Layer)**: ✅ Complete
 **Phase 3 (Frontend)**: ✅ Complete
-**Phase 4 (History List)**: ⬜ Deferred — backend ready, UI not built
+**Phase 4 (History List)**: ✅ Complete
 **All acceptance criteria**: ✅ Verified (2026-05-31)
 
 Build passes (`npm run build` clean). TypeScript clean. Docker build verified working.
@@ -89,13 +89,6 @@ Not deleted — still functional as a legacy route. Not called by the updated Vi
 - [x] `components/HomeClient.tsx` (new — all page.tsx client logic + session integration)
 - [x] `components/VideoChat.tsx` (update props + API target)
 
----
-
-## Resume Instructions
-
-If work is interrupted, read:
-1. This file (current status + decisions)
-2. `tasks.md` (checkbox progress)
-3. The plan file at `/home/zyfun/.claude/plans/humble-shimmying-sifakis.md`
-
-Then continue from the first unchecked item in the relevant phase above.
+### Phase 4
+- [x] `components/SessionHistory.tsx` (new — history list component)
+- [x] `components/HomeClient.tsx` (render SessionHistory on home page)

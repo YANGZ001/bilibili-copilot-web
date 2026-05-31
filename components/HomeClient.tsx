@@ -7,6 +7,7 @@ import { getOrCreateDeviceId } from '@/lib/device'
 import { useSession, type ChatMessage } from '@/hooks/useSession'
 import SummaryViewer from '@/components/SummaryViewer'
 import VideoChat from '@/components/VideoChat'
+import SessionHistory from '@/components/SessionHistory'
 
 interface ActiveContext {
   videoTitle: string
@@ -418,6 +419,9 @@ export default function HomeClient() {
             </div>
           </div>
         )}
+
+        {/* History List — shown on home page when no active session */}
+        {!sessionId && !isLoading && !activeContext && !expired && <SessionHistory />}
 
         {/* Content Section (Summary + Chat) */}
         {activeContext?.videoTitle && (
