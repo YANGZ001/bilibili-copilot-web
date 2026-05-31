@@ -273,10 +273,10 @@ export async function getSubtitleForVideo(url: string, bypassCache = false): Pro
       title: '未知视频',
     }
 
-    // Save failure to Upstash Redis cache (TTL: 12 hours = 43200 seconds) to avoid slamming API
+    // Save failure to Upstash Redis cache (TTL: 30 minutes = 1800 seconds) to avoid slamming API
     if (redis) {
       try {
-        await redis.set(cacheKey, result, { ex: 43200 })
+        await redis.set(cacheKey, result, { ex: 1800 })
         console.log(`[Subtitle Cache] Saved Failure MISS for key: ${cacheKey}`)
       } catch (err) {
         console.error('[Subtitle Cache] Failed to write to Redis:', err)
