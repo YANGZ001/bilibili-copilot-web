@@ -10,7 +10,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 ## Feature Development Workflow
 
-Every new feature must go through a design phase before any code is written. Docs live under `docs/<feature-name>/` and contain three files:
+Every new feature must go through a design phase before any code is written. Docs live under `docs/<feature-name>/` and contain five files. Use `docs/session-feature/` as the canonical reference:
 
 ```
 docs/
@@ -18,6 +18,8 @@ docs/
     proposal.md   # Background, goals, non-goals, design principles
     design.md     # Data model, API design, frontend state, directory changes
     tasks.md      # Phased task checklist + acceptance criteria
+    context.md    # Running log of decisions, blockers, and open questions
+    test_plan.md  # Manual + automated test scenarios, edge cases, acceptance checks
 ```
 
 ### proposal.md must include
@@ -42,6 +44,18 @@ docs/
 - Tasks split by Phase (Phase 1 = infrastructure, Phase 2 = API layer, Phase 3 = frontend integration, Phase 4+ = deferrable)
 - Each task as a `- [ ]` checkbox for progress tracking
 - **Acceptance criteria** at the end, expressed as observable user-facing behaviors
+
+### context.md must include
+
+- Running log of decisions made during implementation (date-stamped entries)
+- Open questions and blockers, updated as they are resolved
+- Links to relevant commits or PRs
+
+### test_plan.md must include
+
+- Manual test scenarios covering the golden path and key edge cases
+- Automated test scenarios (unit + integration) with file paths
+- Regression checks for features adjacent to the new work
 
 ---
 
@@ -91,4 +105,18 @@ docs/
 - `better-sqlite3` is a native addon; it must be compiled in the builder stage and `node_modules` must be copied in full to the runner stage — do NOT prune to production-only deps or the `.node` file will be missing
 - Explicitly create `/data` in the runner stage: `RUN mkdir -p /data`
 - docker-compose volume: `./data:/data`
+
+---
+
+## Build & Run Convention
+
+**Always use `docker compose` — never `npm run build` or `npm run dev`.**
+
+```bash
+docker compose up --build   # build and start
+docker compose up -d        # start in background
+docker compose down         # stop
+```
+
+`npm run build` is forbidden as the production entry point because it skips the native-addon compilation step and runs outside the Docker volume that persists `/data`. All testing and verification must also go through `docker compose`.
 
