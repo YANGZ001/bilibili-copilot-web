@@ -52,12 +52,56 @@ export async function resolveShortUrl(url: string): Promise<string> {
   if (!url.includes('b23.tv')) {
     return url
   }
+
+  const headers = {
+    'User-Agent':
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36',
+    Referer: 'https://www.bilibili.com',
+  }
+
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 5000)
+
   try {
-    const res = await fetch(url, { method: 'HEAD' })
+    // Strategy 1: Manual redirect to get the location header immediately (fastest & safest)
+    const res = await fetch(url, {
+      method: 'GET',
+      redirect: 'manual',
+      headers,
+      signal: controller.signal,
+    })
+
+    clearTimeout(timeoutId)
+
+    if (res.status >= 300 && res.status < 400) {
+      const location = res.headers.get('location')
+      if (location) {
+        // If the location header is relative, resolve it against the original URL
+        return new URL(location, url).toString()
+      }
+    }
+
     return res.url || url
   } catch (error) {
-    console.error('Failed to resolve short url:', error)
-    return url
+    clearTimeout(timeoutId)
+    console.error('Failed to resolve short url with manual redirect, trying fallback HEAD:', error)
+
+    // Fallback strategy 2: HEAD request with follow redirect and timeout
+    const fallbackController = new AbortController()
+    const fallbackTimeout = setTimeout(() => fallbackController.abort(), 5000)
+    try {
+      const res = await fetch(url, {
+        method: 'HEAD',
+        headers,
+        signal: fallbackController.signal,
+      })
+      clearTimeout(fallbackTimeout)
+      return res.url || url
+    } catch (fallbackError) {
+      clearTimeout(fallbackTimeout)
+      console.error('All short url resolution strategies failed:', fallbackError)
+      return url
+    }
   }
 }
 
