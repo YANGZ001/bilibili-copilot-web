@@ -203,7 +203,7 @@ export default function Home() {
                 <span className="text-base select-none mt-0.5">⚠️</span>
                 <div>
                   <p className="font-semibold">分析失败</p>
-                  <p className="text-xs opacity-80 mt-0.5">{error}</p>
+                  <p className="text-xs opacity-80 mt-0.5 whitespace-pre-wrap">{error}</p>
                 </div>
               </div>
             )}

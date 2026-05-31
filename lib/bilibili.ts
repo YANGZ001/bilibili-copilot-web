@@ -263,6 +263,7 @@ export async function getSubtitleForVideo(url: string): Promise<SubtitleResult> 
 
   const maxAttempts = 4 // 1 initial attempt + 3 retries
   let lastError: unknown = null
+  const attemptLogs: string[] = []
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
@@ -343,7 +344,10 @@ export async function getSubtitleForVideo(url: string): Promise<SubtitleResult> 
 
       // Check if the subtitle is related to the title
       if (!isSubtitleRelated(title, text)) {
-        throw new Error('检测到获取的字幕内容与视频标题不匹配（可能触发了 Bilibili 接口缓存 Bug）')
+        const snippet = text.slice(0, 100).replace(/\n/g, ' ') + '...'
+        const mismatchErrorMsg = `获取的字幕与标题不匹配 (拉取的字幕内容: "${snippet}")`
+        attemptLogs.push(`第 ${attempt} 次尝试: ${mismatchErrorMsg}`)
+        throw new Error(mismatchErrorMsg)
       }
 
       const result: SubtitleResult = {
@@ -366,14 +370,18 @@ export async function getSubtitleForVideo(url: string): Promise<SubtitleResult> 
       return result
     } catch (error: unknown) {
       console.error(`Error during subtitle fetch attempt ${attempt}:`, error)
+      const errMsg = error instanceof Error ? error.message : String(error)
+      if (!attemptLogs.some((log) => log.startsWith(`第 ${attempt} 次尝试`))) {
+        attemptLogs.push(`第 ${attempt} 次尝试: 失败 (${errMsg})`)
+      }
       lastError = error
     }
   }
 
-  const errMessage = lastError instanceof Error ? lastError.message : String(lastError)
+  const formattedLogs = attemptLogs.join('\n')
   const result: SubtitleResult = {
     available: false,
-    reason: `字幕获取失败，已尝试重试 3 次: ${errMessage}`,
+    reason: `字幕获取失败，已自动重试 3 次。\n诊断日志如下：\n${formattedLogs}`,
     text: '',
     title: '未知视频',
   }
