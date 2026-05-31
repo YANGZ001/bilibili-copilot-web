@@ -1,3 +1,16 @@
+import { Redis } from '@upstash/redis'
+
+// Initialize Upstash Redis client if env variables are provided
+let redis: Redis | null = null
+if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+  redis = new Redis({
+    url: process.env.UPSTASH_REDIS_REST_URL,
+    token: process.env.UPSTASH_REDIS_REST_TOKEN,
+  })
+} else {
+  console.warn('Upstash Redis environment variables are missing. Subtitle caching is disabled.')
+}
+
 export interface ResolvedVideo {
   aid: number
   bvid: string
@@ -219,6 +232,22 @@ export async function getSubtitleForVideo(url: string): Promise<SubtitleResult> 
   }
 
   const page = extractPageFromUrl(resolvedUrl)
+  const cacheKey = `bilibili:subtitle:${bvid}:${page}`
+
+  // Check Upstash Redis cache first
+  if (redis) {
+    try {
+      const cached = await redis.get<SubtitleResult>(cacheKey)
+      if (cached) {
+        console.log(`[Subtitle Cache] HIT for key: ${cacheKey}`)
+        return cached
+      }
+      console.log(`[Subtitle Cache] MISS for key: ${cacheKey}`)
+    } catch (err) {
+      console.error('[Subtitle Cache] Failed to read from Redis:', err)
+    }
+  }
+
   const sessdata = process.env.BILIBILI_SESSION_TOKEN || ''
 
   const headers: HeadersInit = {
@@ -317,12 +346,24 @@ export async function getSubtitleForVideo(url: string): Promise<SubtitleResult> 
         throw new Error('检测到获取的字幕内容与视频标题不匹配（可能触发了 Bilibili 接口缓存 Bug）')
       }
 
-      return {
+      const result: SubtitleResult = {
         available: true,
         reason: '',
         text,
         title,
       }
+
+      // Save to Upstash Redis cache (TTL: 7 days = 604800 seconds)
+      if (redis) {
+        try {
+          await redis.set(cacheKey, result, { ex: 604800 })
+          console.log(`[Subtitle Cache] Saved HIT for key: ${cacheKey}`)
+        } catch (err) {
+          console.error('[Subtitle Cache] Failed to write to Redis:', err)
+        }
+      }
+
+      return result
     } catch (error: unknown) {
       console.error(`Error during subtitle fetch attempt ${attempt}:`, error)
       lastError = error
@@ -330,10 +371,22 @@ export async function getSubtitleForVideo(url: string): Promise<SubtitleResult> 
   }
 
   const errMessage = lastError instanceof Error ? lastError.message : String(lastError)
-  return {
+  const result: SubtitleResult = {
     available: false,
     reason: `字幕获取失败，已尝试重试 3 次: ${errMessage}`,
     text: '',
     title: '未知视频',
   }
+
+  // Save failure to Upstash Redis cache (TTL: 12 hours = 43200 seconds) to avoid slamming API
+  if (redis) {
+    try {
+      await redis.set(cacheKey, result, { ex: 43200 })
+      console.log(`[Subtitle Cache] Saved Failure MISS for key: ${cacheKey}`)
+    } catch (err) {
+      console.error('[Subtitle Cache] Failed to write to Redis:', err)
+    }
+  }
+
+  return result
 }
