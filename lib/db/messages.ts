@@ -31,3 +31,16 @@ export function getMessages(session_id: string): Message[] {
   const db = getDb()
   return db.prepare('SELECT * FROM messages WHERE session_id = ? ORDER BY created_at ASC, id ASC').all(session_id) as Message[]
 }
+
+export function replaceMessages(session_id: string, messages: Array<{ role: string; content: string }>): void {
+  const db = getDb()
+  const deleteAll = db.prepare('DELETE FROM messages WHERE session_id = ?')
+  const insert = db.prepare('INSERT INTO messages (session_id, role, content, created_at) VALUES (?, ?, ?, ?)')
+  db.transaction((msgs: Array<{ role: string; content: string }>) => {
+    deleteAll.run(session_id)
+    const now = Date.now()
+    for (const msg of msgs) {
+      insert.run(session_id, msg.role, msg.content, now)
+    }
+  })(messages)
+}

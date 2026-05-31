@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { getSession, updateLastAccessed, isExpired } from '@/lib/db/sessions'
-import { getMessages, appendMessages } from '@/lib/db/messages'
+import { getMessages, appendMessages, replaceMessages } from '@/lib/db/messages'
 
 export const runtime = 'nodejs'
 
@@ -115,6 +115,33 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     })
   } catch (error: unknown) {
     console.error('POST /api/sessions/[id]/messages error:', error)
+    return Response.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const { id } = await params
+    const { messages } = await req.json()
+
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return Response.json({ error: 'messages must be a non-empty array' }, { status: 400 })
+    }
+
+    const session = getSession(id)
+    if (!session) {
+      return Response.json({ error: 'Session not found' }, { status: 404 })
+    }
+    if (isExpired(session)) {
+      return Response.json({ error: 'Session expired' }, { status: 410 })
+    }
+
+    replaceMessages(id, messages)
+    updateLastAccessed(id)
+
+    return Response.json({ ok: true })
+  } catch (error: unknown) {
+    console.error('PUT /api/sessions/[id]/messages error:', error)
     return Response.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

@@ -14,6 +14,7 @@ interface ActiveContext {
   summary: string
   sessionId: string
   chatMessages: ChatMessage[]
+  conversationType: string
 }
 
 function extractBvid(url: string): string {
@@ -46,6 +47,7 @@ export default function HomeClient() {
         summary: session.summary,
         sessionId: session.session_id,
         chatMessages: session.chatMessages,
+        conversationType: session.conversation_type,
       })
     }
   }, [session])
@@ -123,6 +125,7 @@ export default function HomeClient() {
               summary: currentSummary,
               sessionId: '',
               chatMessages: [],
+              conversationType: templateId,
             })
           }
         } else {
@@ -172,6 +175,101 @@ export default function HomeClient() {
     setUrl('')
     setError('')
     setStatusMessage('')
+  }
+
+  const handleRetry = async () => {
+    if (!activeContext?.sessionId || isLoading) return
+
+    const sessionIdToRetry = activeContext.sessionId
+    const videoUrl = activeContext.videoUrl
+    const convType = activeContext.conversationType
+    const oldSummary = activeContext.summary
+
+    setIsLoading(true)
+    setError('')
+    setStatusMessage('正在重新生成总结...')
+    setActiveContext((prev) => prev ? { ...prev, summary: '', chatMessages: [] } : null)
+
+    let resolvedSubtitleText = ''
+    let currentSummary = ''
+
+    try {
+      const response = await fetch('/api/summarize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: videoUrl, templateId: convType, bypassCache: false }),
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || '重新生成失败')
+      }
+
+      if (!response.body) throw new Error('服务器未返回可读取的流数据')
+
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let hasParsedMetadata = false
+
+      setStatusMessage('课代表正在重新梳理视频逻辑，请稍候...')
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        const chunk = decoder.decode(value, { stream: true })
+        buffer += chunk
+
+        if (!hasParsedMetadata) {
+          const delimiter = '\n===METADATA_END===\n'
+          const index = buffer.indexOf(delimiter)
+          if (index !== -1) {
+            const metaPart = buffer.slice(0, index)
+            const rest = buffer.slice(index + delimiter.length)
+
+            try {
+              const metadata = JSON.parse(metaPart.trim())
+              resolvedSubtitleText = metadata.subtitleText || ''
+            } catch (err) {
+              console.error('Error parsing metadata from stream', err)
+            }
+
+            hasParsedMetadata = true
+            currentSummary = rest
+            setStatusMessage('')
+            setActiveContext((prev) => prev ? { ...prev, summary: currentSummary } : null)
+          }
+        } else {
+          currentSummary += chunk
+          setActiveContext((prev) => prev ? { ...prev, summary: currentSummary } : null)
+        }
+      }
+
+      // Stream done — replace session messages
+      const selectedTemplate = findTemplate(convType)
+      const systemPrompt = buildChatSystemPrompt(resolvedSubtitleText, activeContext.videoTitle)
+
+      await fetch(`/api/sessions/${sessionIdToRetry}/messages`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: selectedTemplate.instruction },
+            { role: 'assistant', content: currentSummary },
+          ],
+        }),
+      })
+    } catch (err: unknown) {
+      console.error(err)
+      const message = err instanceof Error ? err.message : String(err)
+      setError(message || '重新生成失败，请重试')
+      setStatusMessage('')
+      setActiveContext((prev) => prev ? { ...prev, summary: oldSummary } : null)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const showForm = !sessionId && !isLoading && !activeContext
@@ -340,6 +438,16 @@ export default function HomeClient() {
                   <span>在 B站 播放</span>
                   <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
                 </a>
+                {activeContext.sessionId && (
+                  <button
+                    onClick={handleRetry}
+                    disabled={isLoading}
+                    className="text-xs text-slate-400 hover:text-slate-200 font-semibold transition-colors flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.5"/></svg>
+                    <span>重新生成</span>
+                  </button>
+                )}
                 <button
                   onClick={handleNewConversation}
                   className="text-xs text-slate-400 hover:text-slate-200 font-semibold transition-colors flex items-center gap-1.5"
