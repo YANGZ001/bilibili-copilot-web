@@ -198,7 +198,7 @@ export default function HomeClient() {
       const response = await fetch('/api/summarize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: videoUrl, templateId: convType, bypassCache: false }),
+        body: JSON.stringify({ url: videoUrl, templateId: convType, bypassCache: true }),
       })
 
       if (!response.ok) {
