@@ -219,7 +219,7 @@ export function isSubtitleRelated(title: string, subtitleText: string): boolean 
 }
 
 // Fetch video details and subtitle list
-export async function getSubtitleForVideo(url: string): Promise<SubtitleResult> {
+export async function getSubtitleForVideo(url: string, bypassCache = false): Promise<SubtitleResult> {
   const resolvedUrl = await resolveShortUrl(url)
   const bvid = extractBvidFromUrl(resolvedUrl)
   if (!bvid) {
@@ -234,8 +234,8 @@ export async function getSubtitleForVideo(url: string): Promise<SubtitleResult> 
   const page = extractPageFromUrl(resolvedUrl)
   const cacheKey = `bilibili:subtitle:${bvid}:${page}`
 
-  // Check Upstash Redis cache first
-  if (redis) {
+  // Check Upstash Redis cache first (skip if bypassCache is true)
+  if (redis && !bypassCache) {
     try {
       const cached = await redis.get<SubtitleResult>(cacheKey)
       if (cached) {
@@ -246,6 +246,8 @@ export async function getSubtitleForVideo(url: string): Promise<SubtitleResult> 
     } catch (err) {
       console.error('[Subtitle Cache] Failed to read from Redis:', err)
     }
+  } else if (redis && bypassCache) {
+    console.log(`[Subtitle Cache] Bypassing cache read for key: ${cacheKey} (forced refresh)`)
   }
 
   const sessdata = process.env.BILIBILI_SESSION_TOKEN || ''

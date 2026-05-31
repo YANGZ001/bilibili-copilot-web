@@ -6,7 +6,7 @@ export const runtime = 'nodejs'
 
 export async function POST(req: NextRequest) {
   try {
-    const { url, templateId } = await req.json()
+    const { url, templateId, bypassCache } = await req.json()
 
     if (!url) {
       return Response.json({ error: '请提供视频链接。' }, { status: 400 })
@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
     const template = findTemplate(templateId || 'outline')
 
     // 1. Fetch subtitles and metadata
-    const subtitleResult = await getSubtitleForVideo(url)
+    const subtitleResult = await getSubtitleForVideo(url, bypassCache)
     if (!subtitleResult.available) {
       return Response.json({ error: subtitleResult.reason }, { status: 400 })
     }

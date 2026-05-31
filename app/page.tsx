@@ -11,6 +11,7 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false)
   const [statusMessage, setStatusMessage] = useState('')
   const [error, setError] = useState('')
+  const [bypassCache, setBypassCache] = useState(false)
 
   // Video context states
   const [videoTitle, setVideoTitle] = useState('')
@@ -33,7 +34,7 @@ export default function Home() {
       const response = await fetch('/api/summarize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: url.trim(), templateId }),
+        body: JSON.stringify({ url: url.trim(), templateId, bypassCache }),
       })
 
       if (!response.ok) {
@@ -185,6 +186,21 @@ export default function Home() {
                   ))}
                 </div>
               </div>
+
+              {process.env.NODE_ENV === 'development' && (
+                <div className="flex items-center gap-2 pt-2">
+                  <label className="flex items-center gap-2 text-xs font-semibold text-amber-500 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={bypassCache}
+                      disabled={isLoading}
+                      onChange={(e) => setBypassCache(e.target.checked)}
+                      className="w-3.5 h-3.5 rounded accent-amber-500 border-slate-800 bg-slate-950 focus:ring-0 focus:outline-none"
+                    />
+                    <span>⚡️ 强制刷新 (调试专用：跳过并覆写 Redis 缓存)</span>
+                  </label>
+                </div>
+              )}
             </form>
 
             {/* Status / Error feedback */}
