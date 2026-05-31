@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server'
+import { buildChatSystemPrompt } from '@/lib/prompts'
 
 export const runtime = 'nodejs'
 
@@ -23,16 +24,7 @@ export async function POST(req: NextRequest) {
       return Response.json({ error: '服务器未配置 DEEPSEEK_API_KEY 或 OPENAI_COMPATIBLE_API_KEY，请检查环境变量。' }, { status: 500 })
     }
 
-    const systemPrompt = [
-      `你是一个严谨的视频字幕问答助手。正在就视频《${videoTitle || '当前视频'}》的内容提供答疑。`,
-      '你的回答必须严格基于提供的字幕内容。如果用户问到的信息在字幕中没有提及，请明确告知用户。',
-      '请使用 Markdown 格式回答，可以引用真实的时间戳来帮用户定位。',
-      '如果需要，可以输出图片标签表示当时视频画面，格式为独占一行的：[<image>@MM:SS]，例如 [<image>@03:45]。',
-      '请务必保证图片标签和时间戳完全对应字幕中真实出现的时间点，绝对不要编造。',
-      '\n--- 视频字幕上下文开始 ---',
-      subtitleText,
-      '--- 视频字幕上下文结束 ---',
-    ].join('\n')
+    const systemPrompt = buildChatSystemPrompt(subtitleText, videoTitle)
 
     // Prepare full messages array
     const formattedMessages = [

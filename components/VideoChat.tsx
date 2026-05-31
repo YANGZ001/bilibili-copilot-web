@@ -2,51 +2,47 @@
 
 import React, { useState, useRef, useEffect } from 'react'
 import { marked } from 'marked'
-
-interface Message {
-  role: 'user' | 'assistant'
-  content: string
-}
+import type { ChatMessage } from '@/hooks/useSession'
 
 interface VideoChatProps {
   videoTitle: string
-  subtitleText: string
   videoUrl: string
+  sessionId: string
+  initialMessages?: ChatMessage[]
 }
 
-export default function VideoChat({ videoTitle, subtitleText, videoUrl }: VideoChatProps) {
-  const [messages, setMessages] = useState<Message[]>([])
+export default function VideoChat({ videoTitle, videoUrl, sessionId, initialMessages }: VideoChatProps) {
+  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages ?? [])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const chatEndRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  // Scroll to bottom on new messages or loading state without scrolling the window
+  // Re-sync when session is restored after mount
+  useEffect(() => {
+    if (initialMessages && initialMessages.length > 0 && messages.length === 0) {
+      setMessages(initialMessages)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialMessages])
+
   useEffect(() => {
     if (containerRef.current) {
       containerRef.current.scrollTop = containerRef.current.scrollHeight
     }
   }, [messages, isLoading])
 
-  // Helper: Convert MM:SS or HH:MM:SS to total seconds
   const parseTimestampToSeconds = (timestamp: string): number => {
     const parts = timestamp.split(':').map(Number)
-    if (parts.length === 2) {
-      return parts[0] * 60 + parts[1]
-    } else if (parts.length === 3) {
-      return parts[0] * 3600 + parts[1] * 60 + parts[2]
-    }
+    if (parts.length === 2) return parts[0] * 60 + parts[1]
+    if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2]
     return 0
   }
 
-  // Preprocess text to format timestamps & image frames
   const preprocessText = (text: string): string => {
     let processed = text
-
-    // Ensure all markdown headings are preceded by double newlines so marked parses them correctly
     processed = processed.replace(/\n(#+ )/g, '\n\n$1')
     processed = processed.replace(/\n{3,}/g, '\n\n')
-
     processed = processed.replace(
       /\[<image>@([0-9:]+)\]/g,
       `<div class="my-2">
@@ -63,7 +59,6 @@ export default function VideoChat({ videoTitle, subtitleText, videoUrl }: VideoC
     return processed
   }
 
-  // Delegate click handler for timestamps in messages
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
@@ -72,10 +67,8 @@ export default function VideoChat({ videoTitle, subtitleText, videoUrl }: VideoC
       const target = e.target as HTMLElement
       const clickableElement = target.closest('[data-timestamp]')
       if (!clickableElement) return
-
       const timestamp = clickableElement.getAttribute('data-timestamp')
       if (!timestamp) return
-
       const seconds = parseTimestampToSeconds(timestamp)
       if (seconds > 0 || timestamp === '00:00') {
         e.preventDefault()
@@ -90,36 +83,28 @@ export default function VideoChat({ videoTitle, subtitleText, videoUrl }: VideoC
     }
 
     container.addEventListener('click', handleContainerClick)
-    return () => {
-      container.removeEventListener('click', handleContainerClick)
-    }
+    return () => container.removeEventListener('click', handleContainerClick)
   }, [videoUrl])
 
-  // Submit follow-up question
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!input.trim() || isLoading) return
 
-    const userMessageContent = input.trim()
+    const userContent = input.trim()
     setInput('')
     setIsLoading(true)
 
-    // Add user message locally
-    const updatedMessages = [...messages, { role: 'user', content: userMessageContent } as Message]
-    setMessages(updatedMessages)
-
-    // Add placeholder assistant message
-    setMessages((prev) => [...prev, { role: 'assistant', content: '' }])
+    setMessages((prev) => [
+      ...prev,
+      { role: 'user', content: userContent },
+      { role: 'assistant', content: '' },
+    ])
 
     try {
-      const response = await fetch('/app/../api/chat', {
+      const response = await fetch(`/api/sessions/${sessionId}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: updatedMessages,
-          subtitleText,
-          videoTitle,
-        }),
+        body: JSON.stringify({ role: 'user', content: userContent }),
       })
 
       if (!response.ok) {
@@ -127,9 +112,7 @@ export default function VideoChat({ videoTitle, subtitleText, videoUrl }: VideoC
         throw new Error(data.error || '请求对话失败')
       }
 
-      if (!response.body) {
-        throw new Error('未接收到流数据')
-      }
+      if (!response.body) throw new Error('未接收到流数据')
 
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
@@ -138,32 +121,29 @@ export default function VideoChat({ videoTitle, subtitleText, videoUrl }: VideoC
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
-
         accumulatedText += decoder.decode(value, { stream: true })
         setMessages((prev) => {
           const next = [...prev]
-          const lastMsg = next[next.length - 1]
-          if (lastMsg && lastMsg.role === 'assistant') {
-            lastMsg.content = accumulatedText
-          }
+          const last = next[next.length - 1]
+          if (last?.role === 'assistant') last.content = accumulatedText
           return next
         })
       }
     } catch (error: unknown) {
-      console.error('Chat error:', error)
       const errMessage = error instanceof Error ? error.message : String(error)
       setMessages((prev) => {
         const next = [...prev]
-        const lastMsg = next[next.length - 1]
-        if (lastMsg && lastMsg.role === 'assistant') {
-          lastMsg.content = `❌ 出错了: ${errMessage || '网络连接异常'}`
-        }
+        const last = next[next.length - 1]
+        if (last?.role === 'assistant') last.content = `❌ 出错了: ${errMessage || '网络连接异常'}`
         return next
       })
     } finally {
       setIsLoading(false)
     }
   }
+
+  // videoTitle kept in scope for future use (e.g. aria labels)
+  void videoTitle
 
   return (
     <div className="flex flex-col h-[550px] rounded-2xl bg-slate-900/60 border border-slate-800/80 backdrop-blur-md overflow-hidden">
@@ -183,7 +163,7 @@ export default function VideoChat({ videoTitle, subtitleText, videoUrl }: VideoC
       </div>
 
       {/* Message list */}
-      <div 
+      <div
         ref={containerRef}
         className="flex-1 overflow-y-auto p-5 space-y-4 scrollbar-thin scrollbar-thumb-slate-800"
       >
@@ -201,10 +181,7 @@ export default function VideoChat({ videoTitle, subtitleText, videoUrl }: VideoC
           messages.map((msg, index) => {
             const isUser = msg.role === 'user'
             return (
-              <div
-                key={index}
-                className={`flex w-full ${isUser ? 'justify-end' : 'justify-start'}`}
-              >
+              <div key={index} className={`flex w-full ${isUser ? 'justify-end' : 'justify-start'}`}>
                 <div
                   className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
                     isUser
@@ -215,10 +192,10 @@ export default function VideoChat({ videoTitle, subtitleText, videoUrl }: VideoC
                   {isUser ? (
                     msg.content
                   ) : msg.content ? (
-                    <div 
+                    <div
                       className="markdown-body"
-                      dangerouslySetInnerHTML={{ 
-                        __html: marked.parse(preprocessText(msg.content), { async: false, breaks: true, gfm: true }) as string 
+                      dangerouslySetInnerHTML={{
+                        __html: marked.parse(preprocessText(msg.content), { async: false, breaks: true, gfm: true }) as string,
                       }}
                     />
                   ) : (
@@ -236,11 +213,8 @@ export default function VideoChat({ videoTitle, subtitleText, videoUrl }: VideoC
         <div ref={chatEndRef} />
       </div>
 
-      {/* Input Form */}
-      <form
-        onSubmit={handleSubmit}
-        className="p-3 bg-slate-950/20 border-t border-slate-800/40"
-      >
+      {/* Input */}
+      <form onSubmit={handleSubmit} className="p-3 bg-slate-950/20 border-t border-slate-800/40">
         <div className="relative flex items-center">
           <input
             type="text"

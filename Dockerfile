@@ -2,6 +2,9 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 
+# Install native addon build tools (required by better-sqlite3 / node-gyp)
+RUN apk add --no-cache python3 make g++
+
 # Install dependencies first (for better caching)
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -23,6 +26,8 @@ COPY --from=builder /app/package.json /app/package-lock.json ./
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/node_modules ./node_modules
+
+RUN mkdir -p /data
 
 # Next.js telemetry disable
 ENV NEXT_TELEMETRY_DISABLED=1
