@@ -53,14 +53,8 @@ export async function resolveShortUrl(url: string): Promise<string> {
     return url
   }
   try {
-    const res = await fetch(url, { redirect: 'manual' })
-    if (res.status === 301 || res.status === 302) {
-      const location = res.headers.get('location')
-      if (location) {
-        return location
-      }
-    }
-    return url
+    const res = await fetch(url, { method: 'HEAD' })
+    return res.url || url
   } catch (error) {
     console.error('Failed to resolve short url:', error)
     return url
