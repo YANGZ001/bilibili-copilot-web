@@ -13,3 +13,5 @@ services:
       - DB_PATH=/data/chat.db
     volumes:
       - ./data:/data
+    extra_hosts:
+      - "zyfun-ubuntu26:host-gateway"

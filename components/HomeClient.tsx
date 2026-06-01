@@ -18,6 +18,17 @@ interface ActiveContext {
   conversationType: string
 }
 
+function asrStepMessage(step: string, progress?: number): string {
+  if (step === 'downloading') {
+    return progress != null
+      ? `正在从 B站 下载音频... ${progress}%`
+      : '正在从 B站 下载音频...'
+  }
+  if (step === 'uploading') return '正在上传音频到 Gemini，请稍候...'
+  if (step === 'transcribing') return '正在 AI 转录音频，请耐心等待（约需 1-5 分钟）...'
+  return '正在转录...'
+}
+
 function extractBvid(url: string): string {
   const match = /\/video\/(BV[a-zA-Z0-9]+)/.exec(url)
   if (match) return match[1]
@@ -92,8 +103,9 @@ export default function HomeClient() {
       const decoder = new TextDecoder()
       let buffer = ''
       let hasParsedMetadata = false
+      let streamError = ''
 
-      setStatusMessage('课代表正在梳理视频逻辑，请稍候...')
+      setStatusMessage('正在解析视频 & 提取字幕数据...')
 
       while (true) {
         const { done, value } = await reader.read()
@@ -103,14 +115,36 @@ export default function HomeClient() {
         buffer += chunk
 
         if (!hasParsedMetadata) {
+          // Scan new chunk for PROGRESS: / ERROR: lines to update loading indicators
+          for (const line of chunk.split('\n')) {
+            if (line.startsWith('PROGRESS:')) {
+              try {
+                const data = JSON.parse(line.slice(9)) as { step: string; progress?: number }
+                setStatusMessage(asrStepMessage(data.step, data.progress))
+              } catch {}
+            } else if (line.startsWith('ERROR:')) {
+              try {
+                const data = JSON.parse(line.slice(6)) as { error: string }
+                streamError = data.error
+              } catch {}
+            }
+          }
+
           const delimiter = '\n===METADATA_END===\n'
           const index = buffer.indexOf(delimiter)
           if (index !== -1) {
             const metaPart = buffer.slice(0, index)
             const rest = buffer.slice(index + delimiter.length)
 
+            // Strip PROGRESS:/ERROR: prefix lines, keep only the metadata JSON
+            const metaJson = metaPart
+              .split('\n')
+              .filter((l) => !l.startsWith('PROGRESS:') && !l.startsWith('ERROR:'))
+              .join('')
+              .trim()
+
             try {
-              const metadata = JSON.parse(metaPart.trim())
+              const metadata = JSON.parse(metaJson)
               resolvedVideoTitle = metadata.videoTitle || 'Bilibili 视频'
               resolvedSubtitleText = metadata.subtitleText || ''
             } catch (err) {
@@ -133,6 +167,11 @@ export default function HomeClient() {
           currentSummary += chunk
           setActiveContext((prev) => prev ? { ...prev, summary: currentSummary } : null)
         }
+      }
+
+      // If stream ended without metadata, an ERROR: line arrived — surface it
+      if (!hasParsedMetadata) {
+        throw new Error(streamError || '服务器未返回有效的视频元数据')
       }
 
       // Stream done — create session and navigate
@@ -212,8 +251,9 @@ export default function HomeClient() {
       const decoder = new TextDecoder()
       let buffer = ''
       let hasParsedMetadata = false
+      let streamError = ''
 
-      setStatusMessage('课代表正在重新梳理视频逻辑，请稍候...')
+      setStatusMessage('正在重新获取字幕数据...')
 
       while (true) {
         const { done, value } = await reader.read()
@@ -223,14 +263,34 @@ export default function HomeClient() {
         buffer += chunk
 
         if (!hasParsedMetadata) {
+          for (const line of chunk.split('\n')) {
+            if (line.startsWith('PROGRESS:')) {
+              try {
+                const data = JSON.parse(line.slice(9)) as { step: string; progress?: number }
+                setStatusMessage(asrStepMessage(data.step, data.progress))
+              } catch {}
+            } else if (line.startsWith('ERROR:')) {
+              try {
+                const data = JSON.parse(line.slice(6)) as { error: string }
+                streamError = data.error
+              } catch {}
+            }
+          }
+
           const delimiter = '\n===METADATA_END===\n'
           const index = buffer.indexOf(delimiter)
           if (index !== -1) {
             const metaPart = buffer.slice(0, index)
             const rest = buffer.slice(index + delimiter.length)
 
+            const metaJson = metaPart
+              .split('\n')
+              .filter((l) => !l.startsWith('PROGRESS:') && !l.startsWith('ERROR:'))
+              .join('')
+              .trim()
+
             try {
-              const metadata = JSON.parse(metaPart.trim())
+              const metadata = JSON.parse(metaJson)
               resolvedSubtitleText = metadata.subtitleText || ''
             } catch (err) {
               console.error('Error parsing metadata from stream', err)
@@ -245,6 +305,10 @@ export default function HomeClient() {
           currentSummary += chunk
           setActiveContext((prev) => prev ? { ...prev, summary: currentSummary } : null)
         }
+      }
+
+      if (!hasParsedMetadata) {
+        throw new Error(streamError || '服务器未返回有效的视频元数据')
       }
 
       // Stream done — replace session messages

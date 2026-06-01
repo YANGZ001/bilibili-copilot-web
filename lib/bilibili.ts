@@ -11,6 +11,12 @@ if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) 
   console.warn('Upstash Redis environment variables are missing. Subtitle caching is disabled.')
 }
 
+export interface TranscriptSegment {
+  from: number
+  to: number
+  content: string
+}
+
 export interface ResolvedVideo {
   aid: number
   bvid: string
@@ -174,6 +180,8 @@ export async function getSubtitleForVideo(url: string, bypassCache = false): Pro
     headers['Cookie'] = `SESSDATA=${sessdata}`
   }
 
+  let videoTitle = '未知视频'
+
   try {
     // 1. Fetch video basic info
     const viewUrl = `https://api.bilibili.com/x/web-interface/view?bvid=${bvid}`
@@ -187,6 +195,7 @@ export async function getSubtitleForVideo(url: string, bypassCache = false): Pro
     }
 
     const { aid, pages, title } = viewJson.data
+    videoTitle = title as string
     let cid = viewJson.data.cid
 
     // Find cid for the specific page if multi-part
@@ -270,7 +279,7 @@ export async function getSubtitleForVideo(url: string, bypassCache = false): Pro
       available: false,
       reason: `字幕获取失败: ${errMessage}`,
       text: '',
-      title: '未知视频',
+      title: videoTitle,
     }
 
     // Save failure to Upstash Redis cache (TTL: 30 minutes = 1800 seconds) to avoid slamming API
@@ -285,4 +294,73 @@ export async function getSubtitleForVideo(url: string, bypassCache = false): Pro
 
     return result
   }
+}
+
+// Calls the audio-trainscript-service SSE endpoint and returns the formatted subtitle text.
+// onProgress is called for each downloading/uploading/transcribing event.
+// signal can be used to abort (e.g. 10-minute timeout).
+export async function callTranscribeService(
+  videoUrl: string,
+  onProgress: (step: string, progress?: number) => void,
+  signal?: AbortSignal,
+): Promise<string> {
+  const serviceUrl = process.env.AUDIO_TRANSCRIBE_SERVICE_URL
+  if (!serviceUrl) throw new Error('AUDIO_TRANSCRIBE_SERVICE_URL is not configured')
+
+  const response = await fetch(`${serviceUrl}/api/transcribe`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'bilibili', url: videoUrl }),
+    signal,
+  })
+
+  if (!response.ok) {
+    throw new Error(`Transcribe service returned ${response.status} ${response.statusText}`)
+  }
+  if (!response.body) throw new Error('No response body from transcribe service')
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buf = ''
+  let pendingEvent = ''
+  let pendingData = ''
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    buf += decoder.decode(value, { stream: true })
+    const lines = buf.split('\n')
+    buf = lines.pop() ?? ''
+
+    for (const line of lines) {
+      if (line.startsWith('event:')) {
+        pendingEvent = line.slice(6).trim()
+      } else if (line.startsWith('data:')) {
+        pendingData = line.slice(5).trim()
+      } else if (line === '') {
+        if (pendingEvent && pendingData) {
+          const data = JSON.parse(pendingData)
+          if (pendingEvent === 'downloading') {
+            onProgress('downloading', typeof data.progress === 'number' ? data.progress : undefined)
+          } else if (pendingEvent === 'uploading') {
+            onProgress('uploading')
+          } else if (pendingEvent === 'transcribing') {
+            onProgress('transcribing')
+          } else if (pendingEvent === 'done') {
+            if (!Array.isArray(data)) throw new Error('Invalid done payload from transcribe service')
+            return (data as TranscriptSegment[])
+              .map((s) => `[${formatSeconds(s.from)} - ${formatSeconds(s.to)}] ${s.content}`)
+              .join('\n')
+          } else if (pendingEvent === 'error') {
+            throw new Error(data.error || 'Transcription service error')
+          }
+        }
+        pendingEvent = ''
+        pendingData = ''
+      }
+    }
+  }
+
+  throw new Error('Transcribe service stream ended without a done event')
 }
