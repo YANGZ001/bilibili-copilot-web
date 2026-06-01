@@ -53,11 +53,3 @@ export function listSessionsByDevice(device_id: string): Session[] {
   `).all(device_id, cutoff) as Session[]
 }
 
-export function deleteExpiredSessions(): void {
-  const db = getDb()
-  const cutoff = Date.now() - TTL_MS
-  db.transaction(() => {
-    db.prepare('DELETE FROM messages WHERE session_id IN (SELECT session_id FROM sessions WHERE last_accessed_at < ?)').run(cutoff)
-    db.prepare('DELETE FROM sessions WHERE last_accessed_at < ?').run(cutoff)
-  })()
-}

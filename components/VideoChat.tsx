@@ -93,11 +93,15 @@ export default function VideoChat({ videoUrl, sessionId, initialMessages }: Vide
 
   const handleClear = async () => {
     if (isLoading) return
-    await fetch(`/api/sessions/${sessionId}/messages`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: [] }),
-    }).catch(() => {})
+    try {
+      await fetch(`/api/sessions/${sessionId}/messages`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: [] }),
+      })
+    } catch (err) {
+      console.error('Failed to clear messages in DB:', err)
+    }
     setMessages([])
   }
 
