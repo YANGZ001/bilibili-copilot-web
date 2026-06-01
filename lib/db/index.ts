@@ -26,16 +26,30 @@ CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, created_
 CREATE INDEX IF NOT EXISTS idx_sessions_device ON sessions(device_id, last_accessed_at);
 `
 
-let db: Database.Database
+// Additive migrations applied after initial schema creation.
+// Each statement must be idempotent (ALTER TABLE ADD COLUMN is safe to re-run only
+// on SQLite ≥ 3.37; we guard with a try/catch for older versions that lack IF NOT EXISTS).
+const MIGRATIONS = [
+  `ALTER TABLE sessions ADD COLUMN subtitle_text TEXT NOT NULL DEFAULT ''`,
+]
+
+const g = globalThis as typeof globalThis & { __db?: Database.Database }
 
 function getDb(): Database.Database {
-  if (!db) {
-    db = new Database(DB_PATH)
-    db.pragma('journal_mode = WAL')
-    db.pragma('foreign_keys = ON')
-    db.exec(SCHEMA)
+  if (!g.__db) {
+    g.__db = new Database(DB_PATH)
+    g.__db.pragma('journal_mode = WAL')
+    g.__db.pragma('foreign_keys = ON')
+    g.__db.exec(SCHEMA)
+    for (const migration of MIGRATIONS) {
+      try {
+        g.__db.exec(migration)
+      } catch {
+        // column already exists — safe to ignore
+      }
+    }
   }
-  return db
+  return g.__db
 }
 
 export default getDb
