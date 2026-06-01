@@ -19,10 +19,10 @@ export function appendMessages(session_id: string, messages: Array<{ role: strin
   const db = getDb()
   const insert = db.prepare('INSERT INTO messages (session_id, role, content, created_at) VALUES (?, ?, ?, ?)')
   const insertMany = db.transaction((msgs: Array<{ role: string; content: string }>) => {
-    const now = Date.now()
-    for (const msg of msgs) {
-      insert.run(session_id, msg.role, msg.content, now)
-    }
+    const base = Date.now()
+    msgs.forEach((msg, i) => {
+      insert.run(session_id, msg.role, msg.content, base + i)
+    })
   })
   insertMany(messages)
 }

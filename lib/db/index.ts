@@ -48,6 +48,13 @@ function getDb(): Database.Database {
         // column already exists — safe to ignore
       }
     }
+
+    // Purge expired sessions (older than 14 days) and their messages on startup
+    const cutoff = Date.now() - 14 * 24 * 60 * 60 * 1000
+    g.__db.transaction(() => {
+      g.__db!.prepare('DELETE FROM messages WHERE session_id IN (SELECT session_id FROM sessions WHERE last_accessed_at < ?)').run(cutoff)
+      g.__db!.prepare('DELETE FROM sessions WHERE last_accessed_at < ?').run(cutoff)
+    })()
   }
   return g.__db
 }

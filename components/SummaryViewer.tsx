@@ -2,37 +2,34 @@
 
 import React, { useRef, useEffect } from 'react'
 import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 
 interface SummaryViewerProps {
   summary: string
   videoUrl: string
 }
 
+const DOMPURIFY_CONFIG = { ADD_ATTR: ['data-timestamp'], ADD_TAGS: ['button'] }
+
+function sanitize(html: string): string {
+  if (typeof window === 'undefined') return html
+  return DOMPurify.sanitize(html, DOMPURIFY_CONFIG) as string
+}
+
 export default function SummaryViewer({ summary, videoUrl }: SummaryViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
 
-  // Helper: Convert MM:SS or HH:MM:SS to total seconds
   const parseTimestampToSeconds = (timestamp: string): number => {
     const parts = timestamp.split(':').map(Number)
-    if (parts.length === 2) {
-      // MM:SS
-      return parts[0] * 60 + parts[1]
-    } else if (parts.length === 3) {
-      // HH:MM:SS
-      return parts[0] * 3600 + parts[1] * 60 + parts[2]
-    }
+    if (parts.length === 2) return parts[0] * 60 + parts[1]
+    if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2]
     return 0
   }
 
-  // Preprocess text to replace custom patterns before markdown parsing
   const preprocessText = (text: string): string => {
     let processed = text
-
-    // 1. Ensure all markdown headings are preceded by double newlines so marked parses them correctly as block elements
     processed = processed.replace(/\n(#+ )/g, '\n\n$1')
     processed = processed.replace(/\n{3,}/g, '\n\n')
-
-    // 2. Replace [<image>@MM:SS] or [<image>@HH:MM:SS] with custom HTML card
     processed = processed.replace(
       /\[<image>@([0-9:]+)\]/g,
       `<div class="my-3">
@@ -52,58 +49,47 @@ export default function SummaryViewer({ summary, videoUrl }: SummaryViewerProps)
         </button>
       </div>`
     )
-
-    // 3. Replace [MM:SS] or [HH:MM:SS] (excluding the image tags handled above) with clickable badges
-    // Avoid double matching by targeting brackets enclosing only numbers and colons
     processed = processed.replace(
       /\[([0-9]{1,2}:[0-9]{2}(?::[0-9]{2})?)\]/g,
       `<span data-timestamp="$1" class="bili-timestamp-badge inline-flex items-center px-1.5 py-0.5 mx-0.5 rounded bg-blue-500/10 hover:bg-blue-500/25 text-blue-400 text-xs font-mono cursor-pointer transition-colors border border-blue-500/20 select-none">$1</span>`
     )
-
     return processed
   }
 
-  // Handle timestamp click delegation
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
 
     const handleContainerClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement
-      // Find element with data-timestamp
       const clickableElement = target.closest('[data-timestamp]')
       if (!clickableElement) return
-
       const timestamp = clickableElement.getAttribute('data-timestamp')
       if (!timestamp) return
-
       const seconds = parseTimestampToSeconds(timestamp)
       if (seconds > 0 || timestamp === '00:00') {
         e.preventDefault()
-        // Build video jump URL
         try {
           const urlObj = new URL(videoUrl)
           urlObj.searchParams.set('t', String(seconds))
           window.open(urlObj.toString(), '_blank')
         } catch {
-          // If videoUrl is not a full URL (e.g. just BV), open standard B站 link
           window.open(`https://www.bilibili.com/video/${videoUrl}/?t=${seconds}`, '_blank')
         }
       }
     }
 
     container.addEventListener('click', handleContainerClick)
-    return () => {
-      container.removeEventListener('click', handleContainerClick)
-    }
+    return () => container.removeEventListener('click', handleContainerClick)
   }, [videoUrl])
 
-  // Parse markdown
-  const htmlContent = marked.parse(preprocessText(summary), { async: false, breaks: true, gfm: true }) as string
+  const htmlContent = sanitize(
+    marked.parse(preprocessText(summary), { async: false, breaks: true, gfm: true }) as string
+  )
 
   return (
     <div className="w-full">
-      <div 
+      <div
         ref={containerRef}
         className="markdown-body text-slate-300 w-full"
         dangerouslySetInnerHTML={{ __html: htmlContent }}

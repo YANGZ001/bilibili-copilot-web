@@ -1,13 +1,12 @@
 import { NextRequest } from 'next/server'
-import { createSession } from '@/lib/db/sessions'
+import { createSession, listSessionsByDevice } from '@/lib/db/sessions'
 import { appendMessages } from '@/lib/db/messages'
-import { listSessionsByDevice } from '@/lib/db/sessions'
 
 export const runtime = 'nodejs'
 
 export async function POST(req: NextRequest) {
   try {
-    const { device_id, video_id, video_title, conversation_type, messages } = await req.json()
+    const { device_id, video_id, video_title, conversation_type, subtitle_text, messages } = await req.json()
 
     if (!device_id || !video_id || !video_title) {
       return Response.json({ error: 'Missing required fields' }, { status: 400 })
@@ -15,10 +14,21 @@ export async function POST(req: NextRequest) {
 
     const session_id = crypto.randomUUID()
 
-    createSession({ session_id, device_id, video_id, video_title, conversation_type: conversation_type || 'summarize' })
+    createSession({
+      session_id,
+      device_id,
+      video_id,
+      video_title,
+      conversation_type: conversation_type || 'summarize',
+      subtitle_text: subtitle_text || '',
+    })
 
-    if (Array.isArray(messages) && messages.length > 0) {
-      appendMessages(session_id, messages)
+    // Store only user/assistant messages — no system messages
+    const userMessages = Array.isArray(messages)
+      ? messages.filter((m: { role: string }) => m.role !== 'system')
+      : []
+    if (userMessages.length > 0) {
+      appendMessages(session_id, userMessages)
     }
 
     return Response.json({ session_id })

@@ -10,31 +10,31 @@
 
 ## Phase 2 — Data Layer
 
-- [ ] Update `lib/db/sessions.ts`: add `subtitle_text` to `createSession` input and INSERT
-- [ ] Update `lib/db/sessions.ts`: add `subtitle_text` to `Session` interface
-- [ ] Update `lib/db/sessions.ts`: add `deleteExpiredSessions()` function (deletes sessions + cascade messages where `last_accessed_at < cutoff`)
-- [ ] Update `lib/db/messages.ts`: in `appendMessages`, assign `now` and `now + 1` to user vs assistant rows to avoid timestamp collision
+- [x] Update `lib/db/sessions.ts`: add `subtitle_text` to `createSession` input and INSERT
+- [x] Update `lib/db/sessions.ts`: add `subtitle_text` to `Session` interface
+- [x] Update `lib/db/sessions.ts`: add `deleteExpiredSessions()` function (deletes sessions + cascade messages where `last_accessed_at < cutoff`)
+- [x] Update `lib/db/messages.ts`: in `appendMessages`, assign `now` and `now + 1` to user vs assistant rows to avoid timestamp collision
 
 ## Phase 3 — API Layer
 
-- [ ] Update `app/api/sessions/route.ts` POST: read `subtitle_text` from body; pass to `createSession`; stop appending the system message row
-- [ ] Update `app/api/sessions/[id]/route.ts` GET: return `subtitle_text` in response body
-- [ ] Update `app/api/sessions/[id]/messages/route.ts` POST: use `getLLMConfig`, `readSSEChunks`, cap history to last 20 messages
-- [ ] Update `app/api/sessions/[id]/messages/route.ts` PUT: allow `messages: []` (relax non-empty validation to permit "clear")
-- [ ] Update `app/api/summarize/route.ts`: use `getLLMConfig`, `readSSEChunks`
-- [ ] Update `app/api/chat/route.ts`: use `getLLMConfig`, `readSSEChunks`
-- [ ] Call `deleteExpiredSessions()` on startup (in `lib/db/index.ts` `getDb()`)
+- [x] Update `app/api/sessions/route.ts` POST: read `subtitle_text` from body; pass to `createSession`; stop appending the system message row
+- [x] Update `app/api/sessions/[id]/route.ts` GET: return `subtitle_text` in response body
+- [x] Update `app/api/sessions/[id]/messages/route.ts` POST: use `getLLMConfig`, `readSSEChunks`, cap history to last 20 messages
+- [x] Update `app/api/sessions/[id]/messages/route.ts` PUT: allow `messages: []` (relax non-empty validation to permit "clear")
+- [x] Update `app/api/summarize/route.ts`: use `getLLMConfig`, `readSSEChunks`
+- [x] Update `app/api/chat/route.ts`: use `getLLMConfig`, `readSSEChunks`
+- [x] Call `deleteExpiredSessions()` on startup (in `lib/db/index.ts` `getDb()`)
 
 ## Phase 4 — Frontend
 
-- [ ] `components/SummaryViewer.tsx`: wrap `marked.parse(...)` output with `DOMPurify.sanitize(html, { ADD_ATTR: ['data-timestamp'], ... })` before passing to `dangerouslySetInnerHTML`
-- [ ] `components/VideoChat.tsx`: same DOMPurify sanitization for AI message rendering
-- [ ] `components/VideoChat.tsx`: "清空对话" calls `PUT /api/sessions/${sessionId}/messages` with `{ messages: [] }` before `setMessages([])`
-- [ ] `components/VideoChat.tsx`: remove `videoTitle` from `VideoChatProps` and all call sites
-- [ ] `hooks/useSession.ts`: read `subtitleText` from `data.subtitle_text`; delete `extractSubtitleText()` function
-- [ ] `hooks/useSession.ts`: fix off-by-one — guard `firstAssistantIdx === -1` explicitly
-- [ ] `components/HomeClient.tsx`: send `subtitle_text: resolvedSubtitleText` in `POST /api/sessions` body
-- [ ] `components/HomeClient.tsx`: delete local `extractBvid`; import `extractBvidFromUrl` from `lib/bilibili.ts`
+- [x] `components/SummaryViewer.tsx`: wrap `marked.parse(...)` output with `DOMPurify.sanitize(html, { ADD_ATTR: ['data-timestamp'], ... })` before passing to `dangerouslySetInnerHTML`
+- [x] `components/VideoChat.tsx`: same DOMPurify sanitization for AI message rendering
+- [x] `components/VideoChat.tsx`: "清空对话" calls `PUT /api/sessions/${sessionId}/messages` with `{ messages: [] }` before `setMessages([])`
+- [x] `components/VideoChat.tsx`: remove `videoTitle` from `VideoChatProps` and all call sites
+- [x] `hooks/useSession.ts`: read `subtitleText` from `data.subtitle_text`; delete `extractSubtitleText()` function
+- [x] `hooks/useSession.ts`: fix off-by-one — guard `firstAssistantIdx === -1` explicitly
+- [x] `components/HomeClient.tsx`: send `subtitle_text: resolvedSubtitleText` in `POST /api/sessions` body
+- [~] `components/HomeClient.tsx`: delete local `extractBvid` — skipped: `lib/bilibili.ts` has module-level Redis init; importing it from a `'use client'` component would bundle server code into the browser
 
 ---
 

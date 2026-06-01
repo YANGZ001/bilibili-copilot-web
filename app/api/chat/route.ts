@@ -1,5 +1,7 @@
 import { NextRequest } from 'next/server'
 import { buildChatSystemPrompt } from '@/lib/prompts'
+import { getLLMConfig } from '@/lib/llm'
+import { readSSEChunks } from '@/lib/streamSSE'
 
 export const runtime = 'nodejs'
 
@@ -15,18 +17,12 @@ export async function POST(req: NextRequest) {
       return Response.json({ error: '缺少视频字幕上下文，请先进行视频总结。' }, { status: 400 })
     }
 
-    // 1. Call DeepSeek API with streaming
-    const apiKey = process.env.DEEPSEEK_API_KEY || process.env.OPENAI_COMPATIBLE_API_KEY
-    const apiBase = process.env.DEEPSEEK_API_URL || process.env.OPENAI_COMPATIBLE_BASE_URL || 'https://api.deepseek.com'
-    const model = process.env.DEEPSEEK_MODEL || process.env.OPENAI_COMPATIBLE_MODEL || 'deepseek-chat'
-
+    const { apiKey, chatEndpoint, model } = getLLMConfig()
     if (!apiKey) {
       return Response.json({ error: '服务器未配置 DEEPSEEK_API_KEY 或 OPENAI_COMPATIBLE_API_KEY，请检查环境变量。' }, { status: 500 })
     }
 
     const systemPrompt = buildChatSystemPrompt(subtitleText, videoTitle)
-
-    // Prepare full messages array
     const formattedMessages = [
       { role: 'system', content: systemPrompt },
       ...messages.map((msg: { role: string; content?: string }) => ({
@@ -35,20 +31,10 @@ export async function POST(req: NextRequest) {
       })),
     ]
 
-    const chatEndpoint = `${apiBase.replace(/\/+$/, '')}/chat/completions`
-
     const aiResponse = await fetch(chatEndpoint, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        messages: formattedMessages,
-        temperature: 0.2,
-        stream: true,
-      }),
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ model, messages: formattedMessages, temperature: 0.2, stream: true }),
     })
 
     if (!aiResponse.ok) {
@@ -56,53 +42,14 @@ export async function POST(req: NextRequest) {
       return Response.json({ error: `DeepSeek API 请求失败: ${aiResponse.status} - ${errText}` }, { status: 500 })
     }
 
-    // 2. Stream back the response choice content
     const stream = new ReadableStream({
       async start(controller) {
-        if (!aiResponse.body) {
-          controller.close()
-          return
-        }
-        const reader = aiResponse.body.getReader()
-        const decoder = new TextDecoder()
-        let buffer = ''
+        if (!aiResponse.body) { controller.close(); return }
+        const enc = new TextEncoder()
 
         try {
-          while (true) {
-            const { done, value } = await reader.read()
-            if (done) break
-
-            buffer += decoder.decode(value, { stream: true })
-            const lines = buffer.split('\n')
-            buffer = lines.pop() || ''
-
-            for (const line of lines) {
-              const trimmed = line.trim()
-              if (!trimmed) continue
-              if (trimmed === 'data: [DONE]') continue
-
-              if (trimmed.startsWith('data:')) {
-                try {
-                  const data = JSON.parse(trimmed.slice(5).trim())
-                  const content = data.choices?.[0]?.delta?.content || ''
-                  if (content) {
-                    controller.enqueue(new TextEncoder().encode(content))
-                  }
-                } catch (e) {
-                  console.error('SSE JSON error', trimmed, e)
-                }
-              }
-            }
-          }
-
-          if (buffer.startsWith('data:') && buffer.trim() !== 'data: [DONE]') {
-            try {
-              const data = JSON.parse(buffer.slice(5).trim())
-              const content = data.choices?.[0]?.delta?.content || ''
-              if (content) {
-                controller.enqueue(new TextEncoder().encode(content))
-              }
-            } catch {}
+          for await (const chunk of readSSEChunks(aiResponse.body)) {
+            controller.enqueue(enc.encode(chunk))
           }
         } catch (err) {
           controller.error(err)
@@ -114,7 +61,7 @@ export async function POST(req: NextRequest) {
 
     return new Response(stream, {
       headers: {
-        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Content-Type': 'text/plain; charset=utf-8',
         'Cache-Control': 'no-cache',
         Connection: 'keep-alive',
       },

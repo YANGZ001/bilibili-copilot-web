@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { defaultTemplates, buildChatSystemPrompt, findTemplate } from '@/lib/prompts'
+import { defaultTemplates, findTemplate } from '@/lib/prompts'
 import { getOrCreateDeviceId } from '@/lib/device'
 import { useSession, type ChatMessage } from '@/hooks/useSession'
 import SummaryViewer from '@/components/SummaryViewer'
@@ -177,7 +177,6 @@ export default function HomeClient() {
       // Stream done — create session and navigate
       const bvid = extractBvid(submittedUrl)
       const selectedTemplate = findTemplate(templateId)
-      const systemPrompt = buildChatSystemPrompt(resolvedSubtitleText, resolvedVideoTitle)
 
       const sessionRes = await fetch('/api/sessions', {
         method: 'POST',
@@ -187,8 +186,8 @@ export default function HomeClient() {
           video_id: bvid || submittedUrl,
           video_title: resolvedVideoTitle,
           conversation_type: templateId,
+          subtitle_text: resolvedSubtitleText,
           messages: [
-            { role: 'system', content: systemPrompt },
             { role: 'user', content: selectedTemplate.instruction },
             { role: 'assistant', content: currentSummary },
           ],
@@ -313,14 +312,12 @@ export default function HomeClient() {
 
       // Stream done — replace session messages
       const selectedTemplate = findTemplate(convType)
-      const systemPrompt = buildChatSystemPrompt(resolvedSubtitleText, activeContext.videoTitle)
 
       await fetch(`/api/sessions/${sessionIdToRetry}/messages`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: [
-            { role: 'system', content: systemPrompt },
             { role: 'user', content: selectedTemplate.instruction },
             { role: 'assistant', content: currentSummary },
           ],
@@ -558,7 +555,6 @@ export default function HomeClient() {
               <div className="lg:col-span-5 lg:sticky lg:top-8">
                 {activeContext.sessionId ? (
                   <VideoChat
-                    videoTitle={activeContext.videoTitle}
                     videoUrl={activeContext.videoUrl}
                     sessionId={activeContext.sessionId}
                     initialMessages={activeContext.chatMessages}

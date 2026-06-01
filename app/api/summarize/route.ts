@@ -1,6 +1,8 @@
 import { NextRequest } from 'next/server'
 import { getSubtitleForVideo, callTranscribeService } from '@/lib/bilibili'
 import { findTemplate, type PromptTemplate } from '@/lib/prompts'
+import { getLLMConfig } from '@/lib/llm'
+import { readSSEChunks } from '@/lib/streamSSE'
 
 export const runtime = 'nodejs'
 
@@ -18,11 +20,7 @@ async function pipeDeepSeek(
   const enc = new TextEncoder()
   const write = (s: string) => controller.enqueue(enc.encode(s))
 
-  const apiKey = process.env.DEEPSEEK_API_KEY || process.env.OPENAI_COMPATIBLE_API_KEY
-  const apiBase =
-    process.env.DEEPSEEK_API_URL || process.env.OPENAI_COMPATIBLE_BASE_URL || 'https://api.deepseek.com'
-  const model = process.env.DEEPSEEK_MODEL || process.env.OPENAI_COMPATIBLE_MODEL || 'deepseek-chat'
-
+  const { apiKey, chatEndpoint, model } = getLLMConfig()
   if (!apiKey) {
     write(`ERROR:${JSON.stringify({ error: '服务器未配置 DEEPSEEK_API_KEY，请检查环境变量。' })}\n`)
     controller.close()
@@ -44,8 +42,6 @@ async function pipeDeepSeek(
 字幕如下：
 
 ${subtitleText}`
-
-  const chatEndpoint = `${apiBase.replace(/\/+$/, '')}/chat/completions`
 
   let aiResponse: Response
   try {
@@ -88,45 +84,12 @@ ${subtitleText}`
   // Emit metadata preamble (client switches to summary mode after this)
   write(JSON.stringify({ videoTitle, subtitleText }) + '\n===METADATA_END===\n')
 
-  const reader = aiResponse.body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-
   try {
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n')
-      buffer = lines.pop() || ''
-
-      for (const line of lines) {
-        const trimmed = line.trim()
-        if (!trimmed || trimmed === 'data: [DONE]') continue
-        if (trimmed.startsWith('data:')) {
-          try {
-            const data = JSON.parse(trimmed.slice(5).trim())
-            const content = data.choices?.[0]?.delta?.content || ''
-            if (content) write(content)
-          } catch (e) {
-            console.error('SSE JSON error', trimmed, e)
-          }
-        }
-      }
-    }
-
-    // Flush remaining buffer
-    if (buffer.startsWith('data:') && buffer.trim() !== 'data: [DONE]') {
-      try {
-        const data = JSON.parse(buffer.slice(5).trim())
-        const content = data.choices?.[0]?.delta?.content || ''
-        if (content) write(content)
-      } catch {}
+    for await (const chunk of readSSEChunks(aiResponse.body)) {
+      write(chunk)
     }
   } catch (err) {
     controller.error(err)
-    return
   } finally {
     controller.close()
   }
@@ -211,11 +174,7 @@ export async function POST(req: NextRequest) {
     // 2. Happy path: subtitles found — pre-fetch DeepSeek so we can return a proper error response
     const { text: subtitleText, title: videoTitle } = subtitleResult
 
-    const apiKey = process.env.DEEPSEEK_API_KEY || process.env.OPENAI_COMPATIBLE_API_KEY
-    const apiBase =
-      process.env.DEEPSEEK_API_URL || process.env.OPENAI_COMPATIBLE_BASE_URL || 'https://api.deepseek.com'
-    const model = process.env.DEEPSEEK_MODEL || process.env.OPENAI_COMPATIBLE_MODEL || 'deepseek-chat'
-
+    const { apiKey, chatEndpoint, model } = getLLMConfig()
     if (!apiKey) {
       return Response.json(
         { error: '服务器未配置 DEEPSEEK_API_KEY 或 OPENAI_COMPATIBLE_API_KEY，请检查环境变量。' },
@@ -238,8 +197,6 @@ export async function POST(req: NextRequest) {
 字幕如下：
 
 ${subtitleText}`
-
-    const chatEndpoint = `${apiBase.replace(/\/+$/, '')}/chat/completions`
 
     const aiResponse = await fetch(chatEndpoint, {
       method: 'POST',
@@ -266,55 +223,14 @@ ${subtitleText}`
     // 3. Pipe DeepSeek stream to frontend
     const stream = new ReadableStream({
       async start(controller) {
-        if (!aiResponse.body) {
-          controller.close()
-          return
-        }
-        const reader = aiResponse.body.getReader()
-        const decoder = new TextDecoder()
-        let buffer = ''
+        if (!aiResponse.body) { controller.close(); return }
+        const enc = new TextEncoder()
+        const write = (s: string) => controller.enqueue(enc.encode(s))
 
         try {
-          // Prepend video metadata header so the client knows the title and subtitle text
-          const metaPayload = JSON.stringify({ videoTitle, subtitleText }) + '\n===METADATA_END===\n'
-          controller.enqueue(new TextEncoder().encode(metaPayload))
-
-          while (true) {
-            const { done, value } = await reader.read()
-            if (done) break
-
-            buffer += decoder.decode(value, { stream: true })
-            const lines = buffer.split('\n')
-            buffer = lines.pop() || ''
-
-            for (const line of lines) {
-              const trimmed = line.trim()
-              if (!trimmed) continue
-              if (trimmed === 'data: [DONE]') continue
-
-              if (trimmed.startsWith('data:')) {
-                try {
-                  const data = JSON.parse(trimmed.slice(5).trim())
-                  const content = data.choices?.[0]?.delta?.content || ''
-                  if (content) {
-                    controller.enqueue(new TextEncoder().encode(content))
-                  }
-                } catch (e) {
-                  console.error('SSE JSON error', trimmed, e)
-                }
-              }
-            }
-          }
-
-          // Flush remaining buffer
-          if (buffer.startsWith('data:') && buffer.trim() !== 'data: [DONE]') {
-            try {
-              const data = JSON.parse(buffer.slice(5).trim())
-              const content = data.choices?.[0]?.delta?.content || ''
-              if (content) {
-                controller.enqueue(new TextEncoder().encode(content))
-              }
-            } catch {}
+          write(JSON.stringify({ videoTitle, subtitleText }) + '\n===METADATA_END===\n')
+          for await (const chunk of readSSEChunks(aiResponse.body)) {
+            write(chunk)
           }
         } catch (err) {
           controller.error(err)

@@ -1,8 +1,13 @@
 import { NextRequest } from 'next/server'
 import { getSession, updateLastAccessed, isExpired } from '@/lib/db/sessions'
 import { getMessages, appendMessages, replaceMessages } from '@/lib/db/messages'
+import { getLLMConfig } from '@/lib/llm'
+import { readSSEChunks } from '@/lib/streamSSE'
+import { buildChatSystemPrompt } from '@/lib/prompts'
 
 export const runtime = 'nodejs'
+
+const MAX_HISTORY_MESSAGES = 20
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -24,20 +29,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     updateLastAccessed(id)
 
     const history = getMessages(id)
+    // Filter out any legacy system-message rows, then cap to last N messages
+    const recentHistory = history
+      .filter((m) => m.role !== 'system')
+      .slice(-MAX_HISTORY_MESSAGES)
+
+    const systemPrompt = buildChatSystemPrompt(session.subtitle_text, session.video_title)
     const messagesForLLM = [
-      ...history.map((m) => ({ role: m.role, content: m.content })),
+      { role: 'system', content: systemPrompt },
+      ...recentHistory.map((m) => ({ role: m.role, content: m.content })),
       { role: 'user', content },
     ]
 
-    const apiKey = process.env.DEEPSEEK_API_KEY || process.env.OPENAI_COMPATIBLE_API_KEY
-    const apiBase = process.env.DEEPSEEK_API_URL || process.env.OPENAI_COMPATIBLE_BASE_URL || 'https://api.deepseek.com'
-    const model = process.env.DEEPSEEK_MODEL || process.env.OPENAI_COMPATIBLE_MODEL || 'deepseek-chat'
-
+    const { apiKey, chatEndpoint, model } = getLLMConfig()
     if (!apiKey) {
       return Response.json({ error: 'API key not configured' }, { status: 500 })
     }
 
-    const chatEndpoint = `${apiBase.replace(/\/+$/, '')}/chat/completions`
     const aiResponse = await fetch(chatEndpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
@@ -55,48 +63,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const stream = new ReadableStream({
       async start(controller) {
         if (!aiResponse.body) { controller.close(); return }
-        const reader = aiResponse.body.getReader()
-        const decoder = new TextDecoder()
-        let buffer = ''
+        const enc = new TextEncoder()
 
         try {
-          while (true) {
-            const { done, value } = await reader.read()
-            if (done) break
-
-            buffer += decoder.decode(value, { stream: true })
-            const lines = buffer.split('\n')
-            buffer = lines.pop() || ''
-
-            for (const line of lines) {
-              const trimmed = line.trim()
-              if (!trimmed || trimmed === 'data: [DONE]') continue
-              if (trimmed.startsWith('data:')) {
-                try {
-                  const data = JSON.parse(trimmed.slice(5).trim())
-                  const chunk = data.choices?.[0]?.delta?.content || ''
-                  if (chunk) {
-                    assistantContent += chunk
-                    controller.enqueue(new TextEncoder().encode(chunk))
-                  }
-                } catch (e) {
-                  console.error('SSE JSON parse error', e)
-                }
-              }
-            }
+          for await (const chunk of readSSEChunks(aiResponse.body)) {
+            assistantContent += chunk
+            controller.enqueue(enc.encode(chunk))
           }
-
-          if (buffer.startsWith('data:') && buffer.trim() !== 'data: [DONE]') {
-            try {
-              const data = JSON.parse(buffer.slice(5).trim())
-              const chunk = data.choices?.[0]?.delta?.content || ''
-              if (chunk) {
-                assistantContent += chunk
-                controller.enqueue(new TextEncoder().encode(chunk))
-              }
-            } catch {}
-          }
-
           appendMessages(id, [userMessage, { role: 'assistant', content: assistantContent }])
         } catch (err) {
           controller.error(err)
@@ -108,7 +81,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     return new Response(stream, {
       headers: {
-        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Content-Type': 'text/plain; charset=utf-8',
         'Cache-Control': 'no-cache',
         Connection: 'keep-alive',
       },
@@ -124,8 +97,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const { id } = await params
     const { messages } = await req.json()
 
-    if (!Array.isArray(messages) || messages.length === 0) {
-      return Response.json({ error: 'messages must be a non-empty array' }, { status: 400 })
+    if (!Array.isArray(messages)) {
+      return Response.json({ error: 'messages must be an array' }, { status: 400 })
     }
 
     const session = getSession(id)
@@ -136,7 +109,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       return Response.json({ error: 'Session expired' }, { status: 410 })
     }
 
-    replaceMessages(id, messages)
+    // Filter system messages before storing
+    const userMessages = messages.filter((m: { role: string }) => m.role !== 'system')
+    replaceMessages(id, userMessages)
     updateLastAccessed(id)
 
     return Response.json({ ok: true })

@@ -2,23 +2,28 @@
 
 import React, { useState, useRef, useEffect } from 'react'
 import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 import type { ChatMessage } from '@/hooks/useSession'
 
 interface VideoChatProps {
-  videoTitle: string
   videoUrl: string
   sessionId: string
   initialMessages?: ChatMessage[]
 }
 
-export default function VideoChat({ videoTitle, videoUrl, sessionId, initialMessages }: VideoChatProps) {
+const DOMPURIFY_CONFIG = { ADD_ATTR: ['data-timestamp'], ADD_TAGS: ['button'] }
+
+function sanitize(html: string): string {
+  if (typeof window === 'undefined') return html
+  return DOMPurify.sanitize(html, DOMPURIFY_CONFIG) as string
+}
+
+export default function VideoChat({ videoUrl, sessionId, initialMessages }: VideoChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages ?? [])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const chatEndRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  // Re-sync when session is restored after mount
   useEffect(() => {
     if (initialMessages && initialMessages.length > 0 && messages.length === 0) {
       setMessages(initialMessages)
@@ -86,6 +91,16 @@ export default function VideoChat({ videoTitle, videoUrl, sessionId, initialMess
     return () => container.removeEventListener('click', handleContainerClick)
   }, [videoUrl])
 
+  const handleClear = async () => {
+    if (isLoading) return
+    await fetch(`/api/sessions/${sessionId}/messages`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: [] }),
+    }).catch(() => {})
+    setMessages([])
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!input.trim() || isLoading) return
@@ -142,9 +157,6 @@ export default function VideoChat({ videoTitle, videoUrl, sessionId, initialMess
     }
   }
 
-  // videoTitle kept in scope for future use (e.g. aria labels)
-  void videoTitle
-
   return (
     <div className="flex flex-col h-[550px] rounded-2xl bg-slate-900/60 border border-slate-800/80 backdrop-blur-md overflow-hidden">
       {/* Header */}
@@ -154,7 +166,7 @@ export default function VideoChat({ videoTitle, videoUrl, sessionId, initialMess
           <h4 className="text-sm font-semibold text-slate-200">视频 AI 课代表 答疑室</h4>
         </div>
         <button
-          onClick={() => setMessages([])}
+          onClick={handleClear}
           disabled={messages.length === 0 || isLoading}
           className="text-xs text-slate-400 hover:text-slate-200 disabled:opacity-30 transition-colors"
         >
@@ -195,7 +207,7 @@ export default function VideoChat({ videoTitle, videoUrl, sessionId, initialMess
                     <div
                       className="markdown-body"
                       dangerouslySetInnerHTML={{
-                        __html: marked.parse(preprocessText(msg.content), { async: false, breaks: true, gfm: true }) as string,
+                        __html: sanitize(marked.parse(preprocessText(msg.content), { async: false, breaks: true, gfm: true }) as string),
                       }}
                     />
                   ) : (
@@ -210,7 +222,6 @@ export default function VideoChat({ videoTitle, videoUrl, sessionId, initialMess
             )
           })
         )}
-        <div ref={chatEndRef} />
       </div>
 
       {/* Input */}

@@ -39,28 +39,33 @@ export function useSession() {
 
     fetch(`/api/sessions/${sessionId}`)
       .then(async (res) => {
-        if (res.status === 410) {
-          setExpired(true)
-          return
-        }
-        if (res.status === 404) {
-          return
-        }
-        if (!res.ok) {
-          console.error('Failed to load session', res.status)
-          return
-        }
+        if (res.status === 410) { setExpired(true); return }
+        if (res.status === 404) { return }
+        if (!res.ok) { console.error('Failed to load session', res.status); return }
 
         const data = await res.json()
-        const messages: Array<{ role: string; content: string }> = data.messages || []
+        // Filter any legacy system-message rows that may exist in old sessions
+        const messages: Array<{ role: string; content: string }> = (data.messages || []).filter(
+          (m: { role: string }) => m.role !== 'system'
+        )
 
-        const systemMsg = messages.find((m) => m.role === 'system')
-        const subtitleText = extractSubtitleText(systemMsg?.content || '')
+        const firstAssistantIdx = messages.findIndex((m) => m.role === 'assistant')
+        if (firstAssistantIdx === -1) {
+          setSession({
+            session_id: data.session_id,
+            video_id: data.video_id,
+            video_title: data.video_title,
+            video_url: `https://www.bilibili.com/video/${data.video_id}`,
+            conversation_type: data.conversation_type,
+            summary: '',
+            chatMessages: [],
+            subtitleText: data.subtitle_text || '',
+          })
+          return
+        }
 
-        const nonSystemMessages = messages.filter((m) => m.role !== 'system')
-        const firstAssistantIdx = nonSystemMessages.findIndex((m) => m.role === 'assistant')
-        const summary = firstAssistantIdx >= 0 ? nonSystemMessages[firstAssistantIdx].content : ''
-        const chatMessages = nonSystemMessages.slice(firstAssistantIdx + 1) as ChatMessage[]
+        const summary = messages[firstAssistantIdx].content
+        const chatMessages = messages.slice(firstAssistantIdx + 1) as ChatMessage[]
 
         setSession({
           session_id: data.session_id,
@@ -70,7 +75,7 @@ export function useSession() {
           conversation_type: data.conversation_type,
           summary,
           chatMessages,
-          subtitleText,
+          subtitleText: data.subtitle_text || '',
         })
       })
       .catch((err) => console.error('useSession fetch error:', err))
@@ -78,13 +83,4 @@ export function useSession() {
   }, [sessionId])
 
   return { sessionId, session, loading, expired }
-}
-
-function extractSubtitleText(systemContent: string): string {
-  const start = '--- 视频字幕上下文开始 ---'
-  const end = '--- 视频字幕上下文结束 ---'
-  const startIdx = systemContent.indexOf(start)
-  const endIdx = systemContent.indexOf(end)
-  if (startIdx === -1 || endIdx === -1) return ''
-  return systemContent.slice(startIdx + start.length, endIdx).trim()
 }

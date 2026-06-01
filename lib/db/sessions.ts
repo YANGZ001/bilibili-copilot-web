@@ -6,6 +6,7 @@ export interface Session {
   video_id: string
   video_title: string
   conversation_type: string
+  subtitle_text: string
   created_at: number
   last_accessed_at: number
 }
@@ -22,13 +23,14 @@ export function createSession(data: {
   video_id: string
   video_title: string
   conversation_type: string
+  subtitle_text: string
 }): void {
   const db = getDb()
   const now = Date.now()
   db.prepare(`
-    INSERT INTO sessions (session_id, device_id, video_id, video_title, conversation_type, created_at, last_accessed_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(data.session_id, data.device_id, data.video_id, data.video_title, data.conversation_type, now, now)
+    INSERT INTO sessions (session_id, device_id, video_id, video_title, conversation_type, subtitle_text, created_at, last_accessed_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(data.session_id, data.device_id, data.video_id, data.video_title, data.conversation_type, data.subtitle_text, now, now)
 }
 
 export function getSession(session_id: string): Session | undefined {
@@ -49,4 +51,13 @@ export function listSessionsByDevice(device_id: string): Session[] {
     WHERE device_id = ? AND last_accessed_at > ?
     ORDER BY last_accessed_at DESC
   `).all(device_id, cutoff) as Session[]
+}
+
+export function deleteExpiredSessions(): void {
+  const db = getDb()
+  const cutoff = Date.now() - TTL_MS
+  db.transaction(() => {
+    db.prepare('DELETE FROM messages WHERE session_id IN (SELECT session_id FROM sessions WHERE last_accessed_at < ?)').run(cutoff)
+    db.prepare('DELETE FROM sessions WHERE last_accessed_at < ?').run(cutoff)
+  })()
 }

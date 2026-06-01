@@ -25,8 +25,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       video_id: session.video_id,
       video_title: session.video_title,
       conversation_type: session.conversation_type,
+      subtitle_text: session.subtitle_text,
       created_at: session.created_at,
-      messages: messages.map((m) => ({ role: m.role, content: m.content })),
+      // Filter legacy system-message rows so the client only sees user/assistant
+      messages: messages
+        .filter((m) => m.role !== 'system')
+        .map((m) => ({ role: m.role, content: m.content })),
     })
   } catch (error: unknown) {
     console.error('GET /api/sessions/[id] error:', error)
