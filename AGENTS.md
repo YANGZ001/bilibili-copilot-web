@@ -1,16 +1,10 @@
-<!-- BEGIN:nextjs-agent-rules -->
-# This is NOT the Next.js you know
 
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
-<!-- END:nextjs-agent-rules -->
-
----
-
-# Project Development Standards
+<!-- BEGIN agent-guidelines -->
+# Common Agent Rules
 
 ## Feature Development Workflow
 
-Every new feature must go through a design phase before any code is written. Docs live under `docs/<feature-name>/` and contain five files. Use `docs/archive/session-feature/` as the canonical reference:
+Every new feature must go through a design phase before any code is written. Docs live under `repo_root/docs/<feature-name>/` and contain five files.
 
 ```
 docs/
@@ -19,12 +13,12 @@ docs/
     design.md     # Data model, API design, frontend state, directory changes
     tasks.md      # Phased task checklist + acceptance criteria
     context.md    # Running log of decisions, blockers, and open questions
-    test_plan.md  # Manual + automated test scenarios, edge cases, acceptance checks
+    tests.md      # Manual + automated test scenarios, edge cases, acceptance checks
   archive/
     <feature-name>/        # completed and verified features
 ```
 
-When all acceptance criteria are met and verified, move the feature folder to `docs/archive/`.
+When all acceptance criteria are met and verified, move the feature folder to `repo_root/docs/archive/`.
 
 ### proposal.md must include
 
@@ -55,60 +49,37 @@ When all acceptance criteria are met and verified, move the feature folder to `d
 - Open questions and blockers, updated as they are resolved
 - Links to relevant commits or PRs
 
-### test_plan.md must include
+### tests.md must include
 
 - Manual test scenarios covering the golden path and key edge cases
 - Automated test scenarios (unit + integration) with file paths
 - Regression checks for features adjacent to the new work
+- Maintain test cases under `repo_root/test/`.
 
 ---
 
-## Tech Stack
+## Todo List
 
-| Layer | Technology | Notes |
-|---|---|---|
-| Framework | Next.js (App Router) | Read `node_modules/next/dist/docs/` before writing code |
-| Language | TypeScript | Strict types; no `any` |
-| Styling | Tailwind CSS | Already configured |
-| Database | SQLite (`better-sqlite3`) | Personal-use; zero external dependencies |
-| Deploy | Docker + docker-compose | Volume mount for data persistence |
-| Network | Tailscale private network | No public auth needed |
+A single `repo_root/todo.md` tracks all pending work across every project in this repo. Keep it up to date:
+
+- Add items when new tasks or bugs are identified.
+- When a todo item is ready to start, move it out of `todo.md` and create the corresponding `docs/<feature-name>/` folder instead.
 
 ---
 
-## Database Conventions
+## Decision Ownership
 
-- Use SQLite; `.db` file at `/data/chat.db`, persisted via Docker volume
-- Connection singleton in `lib/db/index.ts`; auto-runs `lib/db/schema.sql` on startup
-- Data access split by entity: `lib/db/sessions.ts`, `lib/db/messages.ts`, etc.
-- Never write raw SQL directly in API route files — always go through `lib/db/*.ts`
+Surface key decisions to the user before acting on them. Do not resolve significant design or scope choices unilaterally.
 
 ---
 
-## API Conventions
+## Relationship to Karpathy Guidelines
 
-- RESTful routes: `/api/sessions`, `/api/sessions/[id]/messages`
-- All API route files must include `export const runtime = 'nodejs'` (required for SQLite)
-- Error response format: `{ error: string }` with semantically correct status codes (404 / 410 / 500)
-- Streaming responses use `ReadableStream` with `Content-Type: text/event-stream`
+These rules complement the [Karpathy guidelines](https://raw.githubusercontent.com/multica-ai/andrej-karpathy-skills/main/CLAUDE.md) and must not duplicate or contradict them.
 
----
+The Karpathy guidelines own: **Think Before Coding**, **Simplicity First**, **Surgical Changes**, and **Goal-Driven Execution**. Do not restate or override those principles here.
 
-## Frontend Conventions
-
-- **Data-driven UI**: Components care only about *what the data is*, not *where it came from* (new and restored sessions share the same render path)
-- **URL as single source of truth**: Session state flows through URL query params; no global store
-- **device_id** managed exclusively via `getOrCreateDeviceId()` in `lib/device.ts`; stored in `localStorage`
-- Hooks have single responsibility: `useSession(id)` only loads and caches session data — no business logic
-
----
-
-## Dockerfile Notes
-
-- Use multi-stage builds (builder + runner)
-- `better-sqlite3` is a native addon; it must be compiled in the builder stage and `node_modules` must be copied in full to the runner stage — do NOT prune to production-only deps or the `.node` file will be missing
-- Explicitly create `/data` in the runner stage: `RUN mkdir -p /data`
-- docker-compose volume: `./data:/data`
+Rules added to this file must cover workflow, process, or project-specific conventions that the Karpathy guidelines do not address (e.g. doc structure, build tooling, todo tracking).
 
 ---
 
@@ -122,5 +93,69 @@ docker compose up -d        # start in background
 docker compose down         # stop
 ```
 
-`npm run build` is forbidden as the production entry point because it skips the native-addon compilation step and runs outside the Docker volume that persists `/data`. All testing and verification must also go through `docker compose`.
+# CLAUDE.md
 
+Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
+
+**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
+
+## 1. Think Before Coding
+
+**Don't assume. Don't hide confusion. Surface tradeoffs.**
+
+Before implementing:
+- State your assumptions explicitly. If uncertain, ask.
+- If multiple interpretations exist, present them - don't pick silently.
+- If a simpler approach exists, say so. Push back when warranted.
+- If something is unclear, stop. Name what's confusing. Ask.
+
+## 2. Simplicity First
+
+**Minimum code that solves the problem. Nothing speculative.**
+
+- No features beyond what was asked.
+- No abstractions for single-use code.
+- No "flexibility" or "configurability" that wasn't requested.
+- No error handling for impossible scenarios.
+- If you write 200 lines and it could be 50, rewrite it.
+
+Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+
+## 3. Surgical Changes
+
+**Touch only what you must. Clean up only your own mess.**
+
+When editing existing code:
+- Don't "improve" adjacent code, comments, or formatting.
+- Don't refactor things that aren't broken.
+- Match existing style, even if you'd do it differently.
+- If you notice unrelated dead code, mention it - don't delete it.
+
+When your changes create orphans:
+- Remove imports/variables/functions that YOUR changes made unused.
+- Don't remove pre-existing dead code unless asked.
+
+The test: Every changed line should trace directly to the user's request.
+
+## 4. Goal-Driven Execution
+
+**Define success criteria. Loop until verified.**
+
+Transform tasks into verifiable goals:
+- "Add validation" → "Write tests for invalid inputs, then make them pass"
+- "Fix the bug" → "Write a test that reproduces it, then make it pass"
+- "Refactor X" → "Ensure tests pass before and after"
+
+For multi-step tasks, state a brief plan:
+```
+1. [Step] → verify: [check]
+2. [Step] → verify: [check]
+3. [Step] → verify: [check]
+```
+
+Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+
+---
+
+**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+<!-- END agent-guidelines -->
