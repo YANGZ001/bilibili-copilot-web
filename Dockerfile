@@ -21,11 +21,10 @@ ENV NODE_ENV=production
 # Install curl for optional healthcheck
 RUN apk add --no-cache curl
 
-# Copy build artifacts and runtime dependencies
-COPY --from=builder /app/package.json /app/package-lock.json ./
-COPY --from=builder /app/.next ./.next
+# Copy standalone bundle (no node_modules needed)
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
-COPY --from=builder /app/node_modules ./node_modules
 
 RUN mkdir -p /data
 
@@ -33,4 +32,4 @@ RUN mkdir -p /data
 ENV NEXT_TELEMETRY_DISABLED=1
 
 EXPOSE 3000
-CMD ["npm", "run", "start"]
+CMD ["node", "server.js"]
