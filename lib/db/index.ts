@@ -49,8 +49,9 @@ function getDb(): Database.Database {
       }
     }
 
-    // Purge expired sessions (older than 14 days) and their messages on startup
-    const cutoff = Date.now() - 14 * 24 * 60 * 60 * 1000
+    // Purge expired sessions on startup; TTL controlled by CHAT_HISTORY_SQLITE_TTL_DAYS (default 90)
+    const ttlDays = parseInt(process.env.CHAT_HISTORY_SQLITE_TTL_DAYS ?? '90', 10)
+    const cutoff = Date.now() - ttlDays * 24 * 60 * 60 * 1000
     g.__db.transaction(() => {
       g.__db!.prepare('DELETE FROM messages WHERE session_id IN (SELECT session_id FROM sessions WHERE last_accessed_at < ?)').run(cutoff)
       g.__db!.prepare('DELETE FROM sessions WHERE last_accessed_at < ?').run(cutoff)

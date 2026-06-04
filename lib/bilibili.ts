@@ -261,10 +261,11 @@ export async function getSubtitleForVideo(url: string, bypassCache = false): Pro
       title,
     }
 
-    // Save to Upstash Redis cache (TTL: 7 days = 604800 seconds)
+    // Save to Upstash Redis cache; TTL controlled by SUBTITLE_REDIS_CACHE_TTL_SECONDS (default 7 days)
+    const subtitleCacheTtl = parseInt(process.env.SUBTITLE_REDIS_CACHE_TTL_SECONDS ?? '604800', 10)
     if (redis) {
       try {
-        await redis.set(cacheKey, result, { ex: 604800 })
+        await redis.set(cacheKey, result, { ex: subtitleCacheTtl })
         console.log(`[Subtitle Cache] Saved HIT for key: ${cacheKey}`)
       } catch (err) {
         console.error('[Subtitle Cache] Failed to write to Redis:', err)
