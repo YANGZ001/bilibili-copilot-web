@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { getSubtitleForVideo, callTranscribeService } from '@/lib/bilibili'
+import { getSubtitleForVideo, callTranscribeService, resolveShortUrl, extractBvidFromUrl } from '@/lib/bilibili'
 import { findTemplate, type PromptTemplate } from '@/lib/prompts'
 import { getLLMConfig } from '@/lib/llm'
 import { readSSEChunks } from '@/lib/streamSSE'
@@ -15,7 +15,8 @@ async function pipeDeepSeek(
     template,
     subtitleText,
     videoTitle,
-  }: { url: string; template: PromptTemplate; subtitleText: string; videoTitle: string },
+    videoId,
+  }: { url: string; template: PromptTemplate; subtitleText: string; videoTitle: string; videoId: string },
 ): Promise<void> {
   const enc = new TextEncoder()
   const write = (s: string) => controller.enqueue(enc.encode(s))
@@ -82,7 +83,7 @@ ${subtitleText}`
   }
 
   // Emit metadata preamble (client switches to summary mode after this)
-  write(JSON.stringify({ videoTitle, subtitleText }) + '\n===METADATA_END===\n')
+  write(JSON.stringify({ videoTitle, subtitleText, videoId }) + '\n===METADATA_END===\n')
 
   try {
     for await (const chunk of readSSEChunks(aiResponse.body)) {
@@ -103,10 +104,12 @@ export async function POST(req: NextRequest) {
       return Response.json({ error: '请提供视频链接。' }, { status: 400 })
     }
 
+    const resolvedUrl = await resolveShortUrl(url)
+    const resolvedBvid = extractBvidFromUrl(resolvedUrl) ?? ''
     const template = findTemplate(templateId || 'outline')
 
     // 1. Fetch subtitles and metadata
-    const subtitleResult = await getSubtitleForVideo(url, bypassCache)
+    const subtitleResult = await getSubtitleForVideo(resolvedUrl, bypassCache)
 
     if (!subtitleResult.available) {
       const serviceUrl = process.env.AUDIO_TRANSCRIBE_SERVICE_URL
@@ -129,7 +132,7 @@ export async function POST(req: NextRequest) {
             const timer = setTimeout(() => ac.abort(), 10 * 60 * 1000)
             try {
               subtitleText = await callTranscribeService(
-                url,
+                resolvedUrl,
                 (step, progress) => {
                   write(`PROGRESS:${JSON.stringify({ step, progress })}\n`)
                 },
@@ -154,10 +157,11 @@ export async function POST(req: NextRequest) {
           }
 
           await pipeDeepSeek(controller, {
-            url,
+            url: resolvedUrl,
             template,
             subtitleText,
             videoTitle: capturedTitle,
+            videoId: resolvedBvid,
           })
         },
       })
@@ -192,7 +196,7 @@ export async function POST(req: NextRequest) {
     const userPrompt = `${template.instruction}
 
 视频标题：${videoTitle}
-视频地址：${url}
+视频地址：${resolvedUrl}
 
 字幕如下：
 
@@ -228,7 +232,7 @@ ${subtitleText}`
         const write = (s: string) => controller.enqueue(enc.encode(s))
 
         try {
-          write(JSON.stringify({ videoTitle, subtitleText }) + '\n===METADATA_END===\n')
+          write(JSON.stringify({ videoTitle, subtitleText, videoId: resolvedBvid }) + '\n===METADATA_END===\n')
           for await (const chunk of readSSEChunks(aiResponse.body)) {
             write(chunk)
           }
