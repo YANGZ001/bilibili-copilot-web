@@ -348,10 +348,8 @@ export async function callTranscribeService(
           } else if (pendingEvent === 'transcribing') {
             onProgress('transcribing')
           } else if (pendingEvent === 'done') {
-            if (!Array.isArray(data)) throw new Error('Invalid done payload from transcribe service')
-            return (data as TranscriptSegment[])
-              .map((s) => `[${formatSeconds(s.from)} - ${formatSeconds(s.to)}] ${s.content}`)
-              .join('\n')
+            if (typeof data?.text !== 'string') throw new Error('Invalid done payload from transcribe service')
+            return data.text
           } else if (pendingEvent === 'error') {
             throw new Error(data.error || 'Transcription service error')
           }
