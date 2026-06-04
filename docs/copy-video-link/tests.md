@@ -13,7 +13,7 @@
 ### Short Link Input
 1. Input a `b23.tv` short link
 2. Click "复制链接"
-3. Verify: the copied text is the original short link (not a resolved URL)
+3. Verify: the copied text is the canonical BV URL (e.g. `https://www.bilibili.com/video/BVxxx`) — `useSession` always reconstructs from `video_id`, so the original short link is not preserved
 
 ### Button Visibility
 1. Open the app with no video loaded — verify: "复制链接" button is NOT visible

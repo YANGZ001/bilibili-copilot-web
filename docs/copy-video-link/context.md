@@ -12,3 +12,4 @@
 - Added `try/catch` to `handleCopyLink`: on failure, surfaces the existing `setError` state with message "复制失败，请手动复制链接".
 - Build verified via `docker compose up --build` — TypeScript clean, container started successfully.
 - All acceptance criteria met and manual tests passed.
+- Short link test spec corrected: `useSession` always reconstructs `video_url` from `video_id` as the canonical BV URL; original short link is not preserved after session is created.

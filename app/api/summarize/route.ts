@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { getSubtitleForVideo, callTranscribeService } from '@/lib/bilibili'
+import { getSubtitleForVideo, callTranscribeService, resolveShortUrl } from '@/lib/bilibili'
 import { findTemplate, type PromptTemplate } from '@/lib/prompts'
 import { getLLMConfig } from '@/lib/llm'
 import { readSSEChunks } from '@/lib/streamSSE'
@@ -103,10 +103,11 @@ export async function POST(req: NextRequest) {
       return Response.json({ error: '请提供视频链接。' }, { status: 400 })
     }
 
+    const resolvedUrl = await resolveShortUrl(url)
     const template = findTemplate(templateId || 'outline')
 
     // 1. Fetch subtitles and metadata
-    const subtitleResult = await getSubtitleForVideo(url, bypassCache)
+    const subtitleResult = await getSubtitleForVideo(resolvedUrl, bypassCache)
 
     if (!subtitleResult.available) {
       const serviceUrl = process.env.AUDIO_TRANSCRIBE_SERVICE_URL
@@ -129,7 +130,7 @@ export async function POST(req: NextRequest) {
             const timer = setTimeout(() => ac.abort(), 10 * 60 * 1000)
             try {
               subtitleText = await callTranscribeService(
-                url,
+                resolvedUrl,
                 (step, progress) => {
                   write(`PROGRESS:${JSON.stringify({ step, progress })}\n`)
                 },
@@ -154,7 +155,7 @@ export async function POST(req: NextRequest) {
           }
 
           await pipeDeepSeek(controller, {
-            url,
+            url: resolvedUrl,
             template,
             subtitleText,
             videoTitle: capturedTitle,
@@ -192,7 +193,7 @@ export async function POST(req: NextRequest) {
     const userPrompt = `${template.instruction}
 
 视频标题：${videoTitle}
-视频地址：${url}
+视频地址：${resolvedUrl}
 
 字幕如下：
 
