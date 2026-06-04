@@ -83,6 +83,7 @@ export default function HomeClient() {
 
     let resolvedVideoTitle = ''
     let resolvedSubtitleText = ''
+    let resolvedVideoId = ''
     let currentSummary = ''
     const submittedUrl = url.trim()
 
@@ -148,6 +149,7 @@ export default function HomeClient() {
               const metadata = JSON.parse(metaJson)
               resolvedVideoTitle = metadata.videoTitle || 'Bilibili 视频'
               resolvedSubtitleText = metadata.subtitleText || ''
+              resolvedVideoId = metadata.videoId || ''
             } catch (err) {
               console.error('Error parsing metadata from stream', err)
             }
@@ -176,7 +178,6 @@ export default function HomeClient() {
       }
 
       // Stream done — create session and navigate
-      const bvid = extractBvid(submittedUrl)
       const selectedTemplate = findTemplate(templateId)
 
       const sessionRes = await fetch('/api/sessions', {
@@ -184,7 +185,7 @@ export default function HomeClient() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           device_id: getOrCreateDeviceId(),
-          video_id: bvid || submittedUrl,
+          video_id: resolvedVideoId || extractBvid(submittedUrl) || submittedUrl,
           video_title: resolvedVideoTitle,
           conversation_type: templateId,
           subtitle_text: resolvedSubtitleText,

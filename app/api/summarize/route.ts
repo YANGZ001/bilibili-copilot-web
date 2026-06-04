@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { getSubtitleForVideo, callTranscribeService, resolveShortUrl } from '@/lib/bilibili'
+import { getSubtitleForVideo, callTranscribeService, resolveShortUrl, extractBvidFromUrl } from '@/lib/bilibili'
 import { findTemplate, type PromptTemplate } from '@/lib/prompts'
 import { getLLMConfig } from '@/lib/llm'
 import { readSSEChunks } from '@/lib/streamSSE'
@@ -15,7 +15,8 @@ async function pipeDeepSeek(
     template,
     subtitleText,
     videoTitle,
-  }: { url: string; template: PromptTemplate; subtitleText: string; videoTitle: string },
+    videoId,
+  }: { url: string; template: PromptTemplate; subtitleText: string; videoTitle: string; videoId: string },
 ): Promise<void> {
   const enc = new TextEncoder()
   const write = (s: string) => controller.enqueue(enc.encode(s))
@@ -82,7 +83,7 @@ ${subtitleText}`
   }
 
   // Emit metadata preamble (client switches to summary mode after this)
-  write(JSON.stringify({ videoTitle, subtitleText }) + '\n===METADATA_END===\n')
+  write(JSON.stringify({ videoTitle, subtitleText, videoId }) + '\n===METADATA_END===\n')
 
   try {
     for await (const chunk of readSSEChunks(aiResponse.body)) {
@@ -104,6 +105,7 @@ export async function POST(req: NextRequest) {
     }
 
     const resolvedUrl = await resolveShortUrl(url)
+    const resolvedBvid = extractBvidFromUrl(resolvedUrl) ?? ''
     const template = findTemplate(templateId || 'outline')
 
     // 1. Fetch subtitles and metadata
@@ -159,6 +161,7 @@ export async function POST(req: NextRequest) {
             template,
             subtitleText,
             videoTitle: capturedTitle,
+            videoId: resolvedBvid,
           })
         },
       })
@@ -229,7 +232,7 @@ ${subtitleText}`
         const write = (s: string) => controller.enqueue(enc.encode(s))
 
         try {
-          write(JSON.stringify({ videoTitle, subtitleText }) + '\n===METADATA_END===\n')
+          write(JSON.stringify({ videoTitle, subtitleText, videoId: resolvedBvid }) + '\n===METADATA_END===\n')
           for await (const chunk of readSSEChunks(aiResponse.body)) {
             write(chunk)
           }
