@@ -11,7 +11,8 @@ export interface Session {
   last_accessed_at: number
 }
 
-const TTL_MS = 14 * 24 * 60 * 60 * 1000 // 14 days
+const TTL_DAYS = parseInt(process.env.CHAT_HISTORY_SQLITE_TTL_DAYS ?? '90', 10)
+const TTL_MS = TTL_DAYS * 24 * 60 * 60 * 1000
 
 export function isExpired(session: Session): boolean {
   return Date.now() - session.last_accessed_at > TTL_MS
