@@ -301,7 +301,7 @@ export async function getCachedTranscript(
   bypassCache = false,
   model?: string,
 ): Promise<string> {
-  const cacheKey = `bilibili:asr:${bvid}`
+  const cacheKey = `bilibili:asr:${bvid}:${model || 'default'}`
   const cacheTtl = parseInt(process.env.SUBTITLE_REDIS_CACHE_TTL_SECONDS ?? '604800', 10)
 
   if (redis && !bypassCache) {

@@ -491,7 +491,7 @@ export default function HomeClient() {
                   <div className="flex flex-wrap gap-2">
                     {TRANSCRIPT_MODELS.map(({ label, value }) => (
                       <button
-                        key={value}
+                        key={label}
                         type="button"
                         disabled={isLoading}
                         onClick={() => setTranscriptModel(value)}
@@ -537,7 +537,7 @@ export default function HomeClient() {
                   <div>
                     <p className="font-semibold">分析失败</p>
                     <p className="text-xs opacity-80 mt-0.5 whitespace-pre-wrap">{error}</p>
-                    {error.includes('"status":"UNAVAILABLE"') && (
+                    {error.includes('UNAVAILABLE') && error.includes('"code":503') && (
                       <p className="text-xs mt-2 text-yellow-400">当前模型繁忙，请在上方「转录模型」中切换其他模型后重试。</p>
                     )}
                   </div>
