@@ -26,6 +26,7 @@ function asrStepMessage(step: string, progress?: number): string {
   }
   if (step === 'uploading') return '正在上传音频到 Gemini，请稍候...'
   if (step === 'transcribing') return '正在 AI 转录音频，请耐心等待（约需 1-5 分钟）...'
+  if (step === 'fallback') return '转录服务异常，正在回退 B站 字幕...'
   return '正在转录...'
 }
 
