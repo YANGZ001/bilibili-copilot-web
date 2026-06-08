@@ -291,6 +291,47 @@ export async function getSubtitleForVideo(url: string, bypassCache = false): Pro
   }
 }
 
+// Wraps callTranscribeService with a Redis cache layer (key: bilibili:asr:{bvid}).
+// On cache hit returns instantly; on miss calls the service and stores the result.
+export async function getCachedTranscript(
+  bvid: string,
+  videoUrl: string,
+  onProgress: (step: string, progress?: number) => void,
+  signal?: AbortSignal,
+  bypassCache = false,
+): Promise<string> {
+  const cacheKey = `bilibili:asr:${bvid}`
+  const cacheTtl = parseInt(process.env.SUBTITLE_REDIS_CACHE_TTL_SECONDS ?? '604800', 10)
+
+  if (redis && !bypassCache) {
+    try {
+      const cached = await redis.get<string>(cacheKey)
+      if (cached) {
+        console.log(`[ASR Cache] HIT for key: ${cacheKey}`)
+        return cached
+      }
+      console.log(`[ASR Cache] MISS for key: ${cacheKey}`)
+    } catch (err) {
+      console.error('[ASR Cache] Failed to read from Redis:', err)
+    }
+  } else if (redis && bypassCache) {
+    console.log(`[ASR Cache] Bypassing cache read for key: ${cacheKey} (forced refresh)`)
+  }
+
+  const text = await callTranscribeService(videoUrl, onProgress, signal)
+
+  if (text && redis) {
+    try {
+      await redis.set(cacheKey, text, { ex: cacheTtl })
+      console.log(`[ASR Cache] Saved for key: ${cacheKey}`)
+    } catch (err) {
+      console.error('[ASR Cache] Failed to write to Redis:', err)
+    }
+  }
+
+  return text
+}
+
 // Calls the audio-trainscript-service SSE endpoint and returns the formatted subtitle text.
 // onProgress is called for each downloading/uploading/transcribing event.
 // signal can be used to abort (e.g. 10-minute timeout).
