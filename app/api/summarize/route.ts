@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { getSubtitleForVideo, callTranscribeService, resolveShortUrl, extractBvidFromUrl } from '@/lib/bilibili'
+import { getSubtitleForVideo, getCachedTranscript, resolveShortUrl, extractBvidFromUrl } from '@/lib/bilibili'
 import { findTemplate, type PromptTemplate } from '@/lib/prompts'
 import { getLLMConfig } from '@/lib/llm'
 import { readSSEChunks } from '@/lib/streamSSE'
@@ -125,12 +125,14 @@ export async function POST(req: NextRequest) {
             const ac = new AbortController()
             const timer = setTimeout(() => ac.abort(), 10 * 60 * 1000)
             try {
-              subtitleText = await callTranscribeService(
+              subtitleText = await getCachedTranscript(
+                resolvedBvid,
                 resolvedUrl,
                 (step, progress) => {
                   write(`PROGRESS:${JSON.stringify({ step, progress })}\n`)
                 },
                 ac.signal,
+                bypassCache,
               )
               asrSucceeded = true
             } finally {

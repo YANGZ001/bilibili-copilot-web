@@ -6,66 +6,26 @@ A self-hosted tool that fetches Bilibili video subtitles and uses an AI model (D
 
 ## System Architecture
 
-The following diagram maps the components, network boundaries, and execution paths of the service.
-
-### Architecture Diagram
-
-GitHub renders this Mermaid flowchart natively:
-
 ```mermaid
 flowchart LR
-    subgraph Browser ["Browser"]
-        direction TB
-        HomeClient["HomeClient<br/>(URL input + mode selector)"]
-        SummaryViewer["SummaryViewer<br/>(markdown + clickable timestamps)"]
-        VideoChat["VideoChat<br/>(multi-turn Q&A)"]
-        SessionHistory["SessionHistory<br/>(restore past sessions)"]
+    Browser["Browser\n(React UI)"]
+
+    subgraph App ["bilibili-copilot-web (Docker)"]
+        API["Next.js API Routes"]
+        SQLite[("SQLite")]
+        API <--> SQLite
     end
 
-    subgraph App ["bilibili-copilot-web (Docker Container)"]
-        direction TB
-        Summarize["POST /api/summarize<br/>(SSE stream)"]
-        Chat["POST /api/chat<br/>(SSE stream)"]
-        Sessions["POST /api/sessions<br/>GET /api/sessions<br/>GET /api/sessions/[id]<br/>POST/PUT /api/sessions/[id]/messages"]
-        SQLite[("SQLite<br/>(./data/chat.db)<br/>sessions + messages")]
+    BiliAPI["Bilibili API\n(subtitles)"]
+    ASR["audio-transcript-service\n(ASR, optional)"]
+    LLM["LLM\n(DeepSeek / OpenAI)"]
+    Redis[("Redis\n(transcript cache, optional)")]
 
-        Summarize --> SQLite
-        Chat --> SQLite
-        Sessions <--> SQLite
-    end
-
-    subgraph External ["External Services"]
-        direction TB
-        BiliAPI["Bilibili Web APIs<br/>(subtitle / metadata)"]
-        LLM["DeepSeek / OpenAI-compatible LLM<br/>(summary + chat)"]
-        Redis[("Upstash Redis<br/>(subtitle cache, optional)")]
-        ASR["audio-transcript-service<br/>(ASR fallback, optional)<br/>via Tailscale"]
-    end
-
-    %% Client → App
-    HomeClient -->|"POST /api/summarize"| Summarize
-    VideoChat -->|"POST /api/sessions/[id]/messages"| Sessions
-    SessionHistory -->|"GET /api/sessions"| Sessions
-    Summarize -.->|"SSE chunks"| HomeClient
-    Sessions -.->|"SSE chunks"| VideoChat
-
-    %% App → External
-    Summarize <-->|"fetch subtitles"| BiliAPI
-    Summarize <-->|"cache read/write"| Redis
-    Summarize -->|"generate summary"| LLM
-    Summarize -->|"ASR fallback"| ASR
-    Chat -->|"stream chat response"| LLM
-
-    %% Node styles
-    classDef client stroke:#3b82f6,stroke-width:1.5px;
-    classDef api stroke:#6366f1,stroke-width:1.5px;
-    classDef storage stroke:#9ca3af,stroke-width:1.5px;
-    classDef external stroke:#10b981,stroke-width:1.5px;
-
-    class HomeClient,SummaryViewer,VideoChat,SessionHistory client;
-    class Summarize,Chat,Sessions api;
-    class SQLite,Redis storage;
-    class BiliAPI,LLM,ASR external;
+    Browser -->|"HTTP / SSE"| API
+    API --> BiliAPI
+    API --> ASR
+    API <--> Redis
+    API --> LLM
 ```
 
 ---
@@ -100,7 +60,7 @@ Indexes on `messages(session_id, created_at)` and `sessions(device_id, last_acce
 
 * **Bilibili APIs**: Fetches video metadata and subtitle tracks. `BILIBILI_SESSION_TOKEN` (the `SESSDATA` cookie) is required for restricted or high-definition content.
 * **DeepSeek / OpenAI-compatible LLM**: Generates summaries and answers follow-up questions. Configurable via `DEEPSEEK_*` or `OPENAI_COMPATIBLE_*` env vars.
-* **Upstash Redis** *(optional)*: Caches raw subtitle text keyed by video ID with a configurable TTL (default 7 days). Skipped entirely when credentials are absent.
+* **Upstash Redis** *(optional)*: Caches transcript text (both Bilibili subtitles and ASR results) keyed by video ID, with a 7-day TTL. Skipped entirely when credentials are absent.
 * **audio-transcript-service** *(optional)*: A companion microservice that downloads Bilibili audio and transcribes it via Gemini ASR. Used when a video has no official subtitle track. Reached over Tailscale MagicDNS at `AUDIO_TRANSCRIBE_SERVICE_URL`.
 
 ---
