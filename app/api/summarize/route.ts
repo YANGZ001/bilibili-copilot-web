@@ -120,6 +120,7 @@ export async function POST(req: NextRequest) {
         if (serviceUrl) {
           // Primary path: audio-transcript-service
           let asrSucceeded = false
+          let asrError = ''
           try {
             const ac = new AbortController()
             const timer = setTimeout(() => ac.abort(), 10 * 60 * 1000)
@@ -136,30 +137,54 @@ export async function POST(req: NextRequest) {
               clearTimeout(timer)
             }
           } catch (err: unknown) {
-            // ASR failed silently; fall through to Bilibili subtitle fallback
+            if (err instanceof Error && err.name === 'AbortError') {
+              // Timeout is unambiguous — surface it immediately, don't try Bilibili
+              write(`ERROR:${JSON.stringify({ error: '转录超时（已超过 10 分钟），请重试或选择更短的视频。' })}\n`)
+              controller.close()
+              return
+            }
+            // Other ASR error: record and fall through to Bilibili
+            asrError = err instanceof Error ? err.message : String(err)
             console.error('[Transcript] ASR service failed, falling back to Bilibili subtitles:', err)
           }
 
           if (asrSucceeded) {
             // Fetch video title separately (lightweight; transcript service doesn't return it)
+            const sessdata = process.env.BILIBILI_SESSION_TOKEN || ''
+            const titleHeaders: HeadersInit = {
+              'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36',
+              Referer: 'https://www.bilibili.com',
+            }
+            if (sessdata) titleHeaders['Cookie'] = `SESSDATA=${sessdata}`
             try {
-              const viewRes = await fetch(`https://api.bilibili.com/x/web-interface/view?bvid=${resolvedBvid}`, {
-                headers: { 'User-Agent': 'Mozilla/5.0', Referer: 'https://www.bilibili.com' },
-              })
-              if (viewRes.ok) {
-                const viewJson = await viewRes.json()
-                if (viewJson.code === 0 && viewJson.data?.title) {
-                  videoTitle = viewJson.data.title as string
+              const titleAc = new AbortController()
+              const titleTimer = setTimeout(() => titleAc.abort(), 5000)
+              try {
+                const viewRes = await fetch(`https://api.bilibili.com/x/web-interface/view?bvid=${resolvedBvid}`, {
+                  headers: titleHeaders,
+                  signal: titleAc.signal,
+                })
+                if (viewRes.ok) {
+                  const viewJson = await viewRes.json()
+                  if (viewJson.code === 0 && viewJson.data?.title) {
+                    videoTitle = viewJson.data.title as string
+                  }
                 }
+              } finally {
+                clearTimeout(titleTimer)
               }
             } catch {
               // Non-critical; keep BV ID as fallback title
             }
           } else {
-            // Bilibili subtitle fallback
+            // Tell the client we're switching to the Bilibili fallback
+            write(`PROGRESS:${JSON.stringify({ step: 'fallback' })}\n`)
             const subtitleResult = await getSubtitleForVideo(resolvedUrl, bypassCache)
             if (!subtitleResult.available) {
-              write(`ERROR:${JSON.stringify({ error: subtitleResult.reason })}\n`)
+              const msg = asrError
+                ? `转录失败: ${asrError}。字幕回退也失败: ${subtitleResult.reason}`
+                : subtitleResult.reason
+              write(`ERROR:${JSON.stringify({ error: msg })}\n`)
               controller.close()
               return
             }
