@@ -38,6 +38,15 @@ function extractBvid(url: string): string {
   return bvMatch ? bvMatch[1] : ''
 }
 
+const TRANSCRIPT_MODELS = [
+  { label: '默认 (Flash Lite Latest)', value: '' },
+  { label: '3.1 Flash Lite', value: 'gemini-3.1-flash-lite' },
+  { label: '2.5 Flash Lite', value: 'gemini-2.5-flash-lite' },
+  { label: '2.5 Flash', value: 'gemini-2.5-flash' },
+  { label: '2.0 Flash', value: 'gemini-2.0-flash' },
+  { label: '2.5 Pro', value: 'gemini-2.5-pro' },
+]
+
 export default function HomeClient() {
   const router = useRouter()
   const { sessionId, session, loading: sessionLoading, expired } = useSession()
@@ -48,6 +57,7 @@ export default function HomeClient() {
   const [statusMessage, setStatusMessage] = useState('')
   const [error, setError] = useState('')
   const [bypassCache, setBypassCache] = useState(false)
+  const [transcriptModel, setTranscriptModel] = useState('')
 
   const [activeContext, setActiveContext] = useState<ActiveContext | null>(null)
   const [copied, setCopied] = useState(false)
@@ -77,6 +87,16 @@ export default function HomeClient() {
     e.preventDefault()
     if (!url.trim() || isLoading) return
 
+    const submittedUrl = url.trim()
+    const looksLikeBilibili =
+      /bilibili\.com\/video\/BV/i.test(submittedUrl) ||
+      /^BV[a-zA-Z0-9]+$/.test(submittedUrl) ||
+      /b23\.tv\//i.test(submittedUrl)
+    if (!looksLikeBilibili) {
+      setError('请输入有效的 B站 视频链接（包含 /video/BV...）或 BV 号。')
+      return
+    }
+
     setIsLoading(true)
     setError('')
     setStatusMessage('正在解析视频 & 提取字幕数据...')
@@ -86,13 +106,12 @@ export default function HomeClient() {
     let resolvedSubtitleText = ''
     let resolvedVideoId = ''
     let currentSummary = ''
-    const submittedUrl = url.trim()
 
     try {
       const response = await fetch('/api/summarize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: submittedUrl, templateId, bypassCache }),
+        body: JSON.stringify({ url: submittedUrl, templateId, bypassCache, transcriptModel }),
       })
 
       if (!response.ok) {
@@ -466,6 +485,28 @@ export default function HomeClient() {
                   </div>
                 </div>
 
+                {/* Transcript Model */}
+                <div className="pt-2">
+                  <span className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">转录模型</span>
+                  <div className="flex flex-wrap gap-2">
+                    {TRANSCRIPT_MODELS.map(({ label, value }) => (
+                      <button
+                        key={label}
+                        type="button"
+                        disabled={isLoading}
+                        onClick={() => setTranscriptModel(value)}
+                        className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-all duration-300 cursor-pointer disabled:opacity-50 select-none ${
+                          transcriptModel === value
+                            ? 'bg-indigo-500/10 border-indigo-500/60 text-indigo-300'
+                            : 'bg-slate-950/30 border-slate-800 hover:border-slate-700/50 text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="flex items-center gap-2 pt-2">
                   <label className="flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-indigo-400 cursor-pointer select-none transition-colors duration-200">
                     <input
@@ -496,6 +537,9 @@ export default function HomeClient() {
                   <div>
                     <p className="font-semibold">分析失败</p>
                     <p className="text-xs opacity-80 mt-0.5 whitespace-pre-wrap">{error}</p>
+                    {error.includes('UNAVAILABLE') && error.includes('"code":503') && (
+                      <p className="text-xs mt-2 text-yellow-400">当前模型繁忙，请在上方「转录模型」中切换其他模型后重试。</p>
+                    )}
                   </div>
                 </div>
               )}

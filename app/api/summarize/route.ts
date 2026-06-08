@@ -98,7 +98,7 @@ ${subtitleText}`
 
 export async function POST(req: NextRequest) {
   try {
-    const { url, templateId, bypassCache } = await req.json()
+    const { url, templateId, bypassCache, transcriptModel } = await req.json()
 
     if (!url) {
       return Response.json({ error: '请提供视频链接。' }, { status: 400 })
@@ -133,6 +133,7 @@ export async function POST(req: NextRequest) {
                 },
                 ac.signal,
                 bypassCache,
+                transcriptModel || undefined,
               )
               asrSucceeded = true
             } finally {
