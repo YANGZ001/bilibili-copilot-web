@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { getSubtitleForVideo, getCachedTranscript, resolveShortUrl, extractBvidFromUrl } from '@/lib/bilibili'
 import { findTemplate, type PromptTemplate } from '@/lib/prompts'
-import { isAllowedModel } from '@/lib/modelsConfig'
+import { isAllowedModel, getDefaultModelId } from '@/lib/modelsConfig'
 import { getLLMConfig } from '@/lib/llm'
 import { readSSEChunks } from '@/lib/streamSSE'
 
@@ -109,6 +109,10 @@ export async function POST(req: NextRequest) {
       return Response.json({ error: '不支持的转录模型。' }, { status: 400 })
     }
 
+    // Empty/missing model falls back to the first config model (undefined only
+    // if config has no models, in which case the service picks its own default).
+    const effectiveModel = transcriptModel || getDefaultModelId()
+
     const resolvedUrl = await resolveShortUrl(url)
     const resolvedBvid = extractBvidFromUrl(resolvedUrl) ?? ''
     const template = findTemplate(templateId || 'outline')
@@ -138,7 +142,7 @@ export async function POST(req: NextRequest) {
                 },
                 ac.signal,
                 bypassCache,
-                transcriptModel || undefined,
+                effectiveModel,
               )
               asrSucceeded = true
             } finally {

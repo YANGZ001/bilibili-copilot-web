@@ -20,6 +20,11 @@ export function getModelIds(): string[] {
   return Object.keys(config.models)
 }
 
+// The default model: first entry in config, or undefined if config is empty.
+export function getDefaultModelId(): string | undefined {
+  return Object.keys(config.models)[0]
+}
+
 export function isAllowedModel(id: string): boolean {
   return Object.prototype.hasOwnProperty.call(config.models, id)
 }
