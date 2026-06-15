@@ -1,7 +1,6 @@
 import { NextRequest } from 'next/server'
 import { getSubtitleForVideo, getCachedTranscript, resolveShortUrl, extractBvidFromUrl } from '@/lib/bilibili'
 import { findTemplate, type PromptTemplate } from '@/lib/prompts'
-import { isAllowedModel, getDefaultModelId } from '@/lib/modelsConfig'
 import { getLLMConfig } from '@/lib/llm'
 import { readSSEChunks } from '@/lib/streamSSE'
 
@@ -99,19 +98,11 @@ ${subtitleText}`
 
 export async function POST(req: NextRequest) {
   try {
-    const { url, templateId, bypassCache, transcriptModel } = await req.json()
+    const { url, templateId, bypassCache } = await req.json()
 
     if (!url) {
       return Response.json({ error: '请提供视频链接。' }, { status: 400 })
     }
-
-    if (transcriptModel && !isAllowedModel(transcriptModel)) {
-      return Response.json({ error: '不支持的转录模型。' }, { status: 400 })
-    }
-
-    // Empty/missing model falls back to the first config model (undefined only
-    // if config has no models, in which case the service picks its own default).
-    const effectiveModel = transcriptModel || getDefaultModelId()
 
     const resolvedUrl = await resolveShortUrl(url)
     const resolvedBvid = extractBvidFromUrl(resolvedUrl) ?? ''
@@ -142,7 +133,6 @@ export async function POST(req: NextRequest) {
                 },
                 ac.signal,
                 bypassCache,
-                effectiveModel,
               )
               asrSucceeded = true
             } finally {
