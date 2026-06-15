@@ -299,9 +299,8 @@ export async function getCachedTranscript(
   onProgress: (step: string, progress?: number) => void,
   signal?: AbortSignal,
   bypassCache = false,
-  model?: string,
 ): Promise<string> {
-  const cacheKey = `bilibili:asr:${bvid}:${model || 'default'}`
+  const cacheKey = `bilibili:asr:${bvid}`
   const cacheTtl = parseInt(process.env.SUBTITLE_REDIS_CACHE_TTL_SECONDS ?? '604800', 10)
 
   if (redis && !bypassCache) {
@@ -319,7 +318,7 @@ export async function getCachedTranscript(
     console.log(`[ASR Cache] Bypassing cache read for key: ${cacheKey} (forced refresh)`)
   }
 
-  const text = await callTranscribeService(videoUrl, onProgress, signal, model)
+  const text = await callTranscribeService(videoUrl, onProgress, signal)
 
   if (text && redis) {
     try {
@@ -340,14 +339,11 @@ export async function callTranscribeService(
   videoUrl: string,
   onProgress: (step: string, progress?: number) => void,
   signal?: AbortSignal,
-  model?: string,
 ): Promise<string> {
   const serviceUrl = process.env.AUDIO_TRANSCRIBE_SERVICE_URL
   if (!serviceUrl) throw new Error('AUDIO_TRANSCRIBE_SERVICE_URL is not configured')
 
-  const endpoint = model
-    ? `${serviceUrl}/api/transcribe?model=${encodeURIComponent(model)}`
-    : `${serviceUrl}/api/transcribe`
+  const endpoint = `${serviceUrl}/api/transcribe`
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
