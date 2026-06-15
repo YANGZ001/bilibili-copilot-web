@@ -38,16 +38,7 @@ function extractBvid(url: string): string {
   return bvMatch ? bvMatch[1] : ''
 }
 
-const TRANSCRIPT_MODELS = [
-  { label: '默认 (Flash Lite Latest)', value: '' },
-  { label: '3.1 Flash Lite', value: 'gemini-3.1-flash-lite' },
-  { label: '2.5 Flash Lite', value: 'gemini-2.5-flash-lite' },
-  { label: '2.5 Flash', value: 'gemini-2.5-flash' },
-  { label: '2.0 Flash', value: 'gemini-2.0-flash' },
-  { label: '2.5 Pro', value: 'gemini-2.5-pro' },
-]
-
-export default function HomeClient() {
+export default function HomeClient({ models }: { models: string[] }) {
   const router = useRouter()
   const { sessionId, session, loading: sessionLoading, expired } = useSession()
 
@@ -57,7 +48,7 @@ export default function HomeClient() {
   const [statusMessage, setStatusMessage] = useState('')
   const [error, setError] = useState('')
   const [bypassCache, setBypassCache] = useState(false)
-  const [transcriptModel, setTranscriptModel] = useState('')
+  const [transcriptModel, setTranscriptModel] = useState(models[0] ?? '')
 
   const [activeContext, setActiveContext] = useState<ActiveContext | null>(null)
   const [copied, setCopied] = useState(false)
@@ -489,9 +480,9 @@ export default function HomeClient() {
                 <div className="pt-2">
                   <span className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">转录模型</span>
                   <div className="flex flex-wrap gap-2">
-                    {TRANSCRIPT_MODELS.map(({ label, value }) => (
+                    {models.map((value) => (
                       <button
-                        key={label}
+                        key={value}
                         type="button"
                         disabled={isLoading}
                         onClick={() => setTranscriptModel(value)}
@@ -501,7 +492,7 @@ export default function HomeClient() {
                             : 'bg-slate-950/30 border-slate-800 hover:border-slate-700/50 text-slate-400 hover:text-slate-200'
                         }`}
                       >
-                        {label}
+                        {value}
                       </button>
                     ))}
                   </div>

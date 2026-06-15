@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { getSubtitleForVideo, getCachedTranscript, resolveShortUrl, extractBvidFromUrl } from '@/lib/bilibili'
 import { findTemplate, type PromptTemplate } from '@/lib/prompts'
+import { isAllowedModel } from '@/lib/modelsConfig'
 import { getLLMConfig } from '@/lib/llm'
 import { readSSEChunks } from '@/lib/streamSSE'
 
@@ -102,6 +103,10 @@ export async function POST(req: NextRequest) {
 
     if (!url) {
       return Response.json({ error: '请提供视频链接。' }, { status: 400 })
+    }
+
+    if (transcriptModel && !isAllowedModel(transcriptModel)) {
+      return Response.json({ error: '不支持的转录模型。' }, { status: 400 })
     }
 
     const resolvedUrl = await resolveShortUrl(url)
