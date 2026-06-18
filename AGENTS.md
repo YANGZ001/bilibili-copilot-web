@@ -93,6 +93,23 @@ docker compose up -d        # start in background
 docker compose down         # stop
 ```
 
+---
+
+## CSS Gotchas
+
+### `overflow-x: hidden` breaks `position: sticky`
+
+Any ancestor with `overflow` set to anything other than `visible` becomes the sticky scroll container. If that ancestor doesn't itself scroll, sticky stops working entirely.
+
+- **Wrong:** `overflow-x-hidden` on a parent of a sticky element
+- **Right:** `[overflow-x:clip]` — clips overflow visually without creating a scroll container
+
+### `globals.css` CSS variables override Tailwind body classes
+
+`globals.css` sets `body { background: var(--background) }` with `--background: #ffffff` by default. This wins over a Tailwind `bg-*` class added to `<body>` in `layout.tsx` due to CSS layer ordering.
+
+- **Fix:** Update `--background` in `globals.css` to match the app's actual background color, for both the default and `prefers-color-scheme: dark` blocks.
+
 # CLAUDE.md
 
 Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
