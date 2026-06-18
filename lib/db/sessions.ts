@@ -7,6 +7,7 @@ export interface Session {
   video_title: string
   conversation_type: string
   subtitle_text: string
+  source_url: string
   created_at: number
   last_accessed_at: number
 }
@@ -25,13 +26,14 @@ export function createSession(data: {
   video_title: string
   conversation_type: string
   subtitle_text: string
+  source_url: string
 }): void {
   const db = getDb()
   const now = Date.now()
   db.prepare(`
-    INSERT INTO sessions (session_id, device_id, video_id, video_title, conversation_type, subtitle_text, created_at, last_accessed_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(data.session_id, data.device_id, data.video_id, data.video_title, data.conversation_type, data.subtitle_text, now, now)
+    INSERT INTO sessions (session_id, device_id, video_id, video_title, conversation_type, subtitle_text, source_url, created_at, last_accessed_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(data.session_id, data.device_id, data.video_id, data.video_title, data.conversation_type, data.subtitle_text, data.source_url, now, now)
 }
 
 export function getSession(session_id: string): Session | undefined {

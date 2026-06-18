@@ -6,7 +6,7 @@ export const runtime = 'nodejs'
 
 export async function POST(req: NextRequest) {
   try {
-    const { device_id, video_id, video_title, conversation_type, subtitle_text, messages } = await req.json()
+    const { device_id, video_id, video_title, conversation_type, subtitle_text, source_url, messages } = await req.json()
 
     if (!device_id || !video_id || !video_title) {
       return Response.json({ error: 'Missing required fields' }, { status: 400 })
@@ -21,6 +21,7 @@ export async function POST(req: NextRequest) {
       video_title,
       conversation_type: conversation_type || 'summarize',
       subtitle_text: subtitle_text || '',
+      source_url: source_url || '',
     })
 
     // Store only user/assistant messages — no system messages

@@ -31,6 +31,7 @@ CREATE INDEX IF NOT EXISTS idx_sessions_device ON sessions(device_id, last_acces
 // on SQLite ≥ 3.37; we guard with a try/catch for older versions that lack IF NOT EXISTS).
 const MIGRATIONS = [
   `ALTER TABLE sessions ADD COLUMN subtitle_text TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE sessions ADD COLUMN source_url TEXT NOT NULL DEFAULT ''`,
 ]
 
 const g = globalThis as typeof globalThis & { __db?: Database.Database }
