@@ -361,7 +361,7 @@ export default function HomeClient() {
   const showContent = !!(activeContext?.videoTitle || sessionLoading)
 
   return (
-    <main className="min-h-screen relative overflow-x-hidden text-slate-100 bg-[#0a0f1d] selection:bg-indigo-500/30">
+    <main className="min-h-screen relative [overflow-x:clip] text-slate-100 bg-[#0a0f1d] selection:bg-indigo-500/30">
       <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-indigo-500/10 blur-[120px] pointer-events-none"></div>
       <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-pink-500/5 blur-[120px] pointer-events-none"></div>
 
@@ -602,7 +602,7 @@ export default function HomeClient() {
                     initialMessages={activeContext.chatMessages}
                   />
                 ) : (
-                  <div className="flex flex-col h-[550px] rounded-2xl bg-slate-900/60 border border-slate-800/80 backdrop-blur-md items-center justify-center text-slate-500 text-sm">
+                  <div className="flex flex-col lg:max-h-[calc(100vh-4rem)] min-h-[300px] rounded-2xl bg-slate-900/60 border border-slate-800/80 backdrop-blur-md items-center justify-center text-slate-500 text-sm">
                     <div className="w-6 h-6 rounded-full border-2 border-slate-700 border-t-slate-500 animate-spin mb-2"></div>
                     <span>正在保存对话...</span>
                   </div>
