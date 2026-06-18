@@ -71,7 +71,7 @@ export function useSession() {
           session_id: data.session_id,
           video_id: data.video_id,
           video_title: data.video_title,
-          video_url: `https://www.bilibili.com/video/${data.video_id}`,
+          video_url: data.source_url || `https://www.bilibili.com/video/${data.video_id}`,
           conversation_type: data.conversation_type,
           summary,
           chatMessages,
