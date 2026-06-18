@@ -137,9 +137,9 @@ export async function getSubtitleForVideo(url: string, bypassCache = false): Pro
   if (!bvid) {
     return {
       available: false,
-      reason: '无法识别的 B站 视频链接，请确保链接包含 /video/BV...',
+      reason: '无法识别的 B站 音视频链接，请确保链接包含 /video/BV...',
       text: '',
-      title: '未知视频',
+      title: '未知音视频',
     }
   }
 
@@ -175,7 +175,7 @@ export async function getSubtitleForVideo(url: string, bypassCache = false): Pro
     headers['Cookie'] = `SESSDATA=${sessdata}`
   }
 
-  let videoTitle = '未知视频'
+  let videoTitle = '未知音视频'
 
   try {
     // 1. Fetch video basic info
@@ -186,7 +186,7 @@ export async function getSubtitleForVideo(url: string, bypassCache = false): Pro
     }
     const viewJson = await viewRes.json()
     if (viewJson.code !== 0 || !viewJson.data) {
-      throw new Error(viewJson.message || '获取视频信息失败')
+      throw new Error(viewJson.message || '获取音视频信息失败')
     }
 
     const { aid, pages, title } = viewJson.data
@@ -214,7 +214,7 @@ export async function getSubtitleForVideo(url: string, bypassCache = false): Pro
 
     const subtitles = playerJson.data.subtitle?.subtitles as BiliSubtitleInfo[] | undefined
     if (!subtitles || subtitles.length === 0) {
-      throw new Error('该视频暂无可用字幕。')
+      throw new Error('该音视频暂无可用字幕。')
     }
 
     // Prefer zh-CN, fallback to zh-Hans, then any zh, then first available

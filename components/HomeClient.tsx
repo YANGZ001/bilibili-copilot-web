@@ -84,13 +84,13 @@ export default function HomeClient() {
       submittedUrl = `https://www.bilibili.com/video/${submittedUrl}`
     }
     if (detectSource(submittedUrl) === null) {
-      setError('请输入有效的视频或播客链接（支持 Bilibili / 小宇宙 / Snipd）。')
+      setError('请输入有效的音视频或播客链接（支持 Bilibili / 小宇宙 / Snipd）。')
       return
     }
 
     setIsLoading(true)
     setError('')
-    setStatusMessage('正在解析视频 & 提取字幕数据...')
+    setStatusMessage('正在解析音视频 & 提取字幕数据...')
     setActiveContext(null)
 
     let resolvedVideoTitle = ''
@@ -119,7 +119,7 @@ export default function HomeClient() {
       let hasParsedMetadata = false
       let streamError = ''
 
-      setStatusMessage('正在解析视频 & 提取字幕数据...')
+      setStatusMessage('正在解析音视频 & 提取字幕数据...')
 
       while (true) {
         const { done, value } = await reader.read()
@@ -187,7 +187,7 @@ export default function HomeClient() {
 
       // If stream ended without metadata, an ERROR: line arrived — surface it
       if (!hasParsedMetadata) {
-        throw new Error(streamError || '服务器未返回有效的视频元数据')
+        throw new Error(streamError || '服务器未返回有效的音视频元数据')
       }
 
       // Stream done — create session and navigate
@@ -330,7 +330,7 @@ export default function HomeClient() {
       }
 
       if (!hasParsedMetadata) {
-        throw new Error(streamError || '服务器未返回有效的视频元数据')
+        throw new Error(streamError || '服务器未返回有效的音视频元数据')
       }
 
       // Stream done — replace session messages
