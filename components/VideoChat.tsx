@@ -162,7 +162,7 @@ export default function VideoChat({ videoUrl, sessionId, initialMessages }: Vide
   }
 
   return (
-    <div className="flex flex-col max-h-[calc(100vh-4rem)] rounded-2xl bg-slate-900/60 border border-slate-800/80 backdrop-blur-md overflow-hidden">
+    <div className="flex flex-col lg:max-h-[calc(100vh-4rem)] rounded-2xl bg-slate-900/60 border border-slate-800/80 backdrop-blur-md overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-4 bg-slate-950/30 border-b border-slate-800/50">
         <div className="flex items-center gap-2">
