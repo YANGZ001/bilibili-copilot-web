@@ -1,6 +1,6 @@
-# B站 AI 视频课代表
+# AI 音视频课代表
 
-A self-hosted tool that fetches Bilibili video subtitles and uses an AI model (DeepSeek or any OpenAI-compatible API) to generate structured summaries. Supports multi-turn follow-up Q&A, session history, and clickable timestamps.
+A self-hosted tool that turns a **Bilibili video**, **Xiaoyuzhou (小宇宙)** podcast episode, or **Snipd** episode into a structured summary using an AI model (DeepSeek or any OpenAI-compatible API). It transcribes the audio (via the companion `audio-transcript-service`), then generates the summary. Supports multi-turn follow-up Q&A, session history, and clickable timestamps.
 
 ---
 
@@ -16,14 +16,16 @@ flowchart LR
         API <--> SQLite
     end
 
-    BiliAPI["Bilibili API\n(subtitles)"]
-    ASR["audio-transcript-service\n(ASR, optional)"]
+    Sources["Bilibili / Xiaoyuzhou / Snipd"]
+    ASR["audio-transcript-service\n(ASR + title)"]
+    BiliAPI["Bilibili subtitle API\n(fallback, Bilibili only)"]
     LLM["LLM\n(DeepSeek / OpenAI)"]
     Redis[("Redis\n(transcript cache, optional)")]
 
     Browser -->|"HTTP / SSE"| API
-    API --> BiliAPI
     API --> ASR
+    ASR --> Sources
+    API --> BiliAPI
     API <--> Redis
     API --> LLM
 ```
@@ -34,14 +36,14 @@ flowchart LR
 
 ### 1. Browser UI
 
-* **HomeClient (`components/HomeClient.tsx`)**: Main page — accepts any Bilibili URL (full link, BV ID, or b23.tv short link), lets the user pick a summary mode, and fires `POST /api/summarize`. Consumes the SSE stream and hands the result to SummaryViewer + VideoChat.
-* **SummaryViewer (`components/SummaryViewer.tsx`)**: Renders the AI-generated markdown summary. Converts `[MM:SS]` timestamp markers into clickable links that jump to the exact moment in the embedded Bilibili player. Sanitizes output with DOMPurify.
+* **HomeClient (`components/HomeClient.tsx`)**: Main page — accepts a Bilibili URL (full link, BV ID, or b23.tv short link), a Xiaoyuzhou episode URL, or a Snipd episode URL, lets the user pick a summary mode, and fires `POST /api/summarize`. Consumes the SSE stream and hands the result to SummaryViewer + VideoChat. URL validation lives in `lib/source.ts` (`detectSource`).
+* **SummaryViewer (`components/SummaryViewer.tsx`)**: Renders the AI-generated markdown summary. Converts `[MM:SS]` timestamp markers into clickable links — for Bilibili they jump to the exact moment in the player; for podcasts they open the episode page (podcast sites ignore the `?t=` param). Sanitizes output with DOMPurify.
 * **VideoChat (`components/VideoChat.tsx`)**: Multi-turn Q&A interface grounded in the video's subtitles. Each message calls `POST /api/sessions/[id]/messages` and streams the response back.
 * **SessionHistory (`components/SessionHistory.tsx`)**: Lists past sessions stored by device ID. Clicking a session restores the full summary and chat context.
 
 ### 2. Next.js API Layer
 
-* **`/api/summarize`**: Core endpoint. Resolves short URLs, fetches Bilibili subtitles (with optional Upstash Redis caching), falls back to `audio-transcript-service` ASR if no subtitle track exists, then streams a structured summary from the LLM as SSE. Emits `PROGRESS:` events during long-running steps.
+* **`/api/summarize`**: Core endpoint. Detects the source (`lib/source.ts`), resolves short URLs, then transcribes via `audio-transcript-service` (the primary path for all sources; transcripts cached in Upstash Redis as `{ text, title }` keyed by `<source>:asr:<id>`). For **Bilibili only**, it fetches the real video title separately and falls back to the official subtitle track if ASR fails; **podcasts** use the title the ASR service returns and surface the ASR error directly if it fails. Streams a structured summary from the LLM as SSE, emitting `PROGRESS:` events during long-running steps.
 * **`/api/chat`**: Stateless chat endpoint used internally. Injects full subtitle text as system context and streams the LLM response.
 * **`/api/sessions`**: CRUD for session records. Persists video metadata, conversation type, subtitle text, and message history in SQLite. Auto-cleans sessions older than `CHAT_HISTORY_SQLITE_TTL_DAYS` days on each write.
 
@@ -51,30 +53,31 @@ SQLite database at `./data/chat.db` (Docker volume at `/data/chat.db`).
 
 | Table | Key columns |
 |-------|-------------|
-| `sessions` | `session_id` (UUID PK), `device_id`, `video_id`, `video_title`, `conversation_type`, `subtitle_text`, `created_at`, `last_accessed_at` |
+| `sessions` | `session_id` (UUID PK), `device_id`, `video_id`, `video_title`, `conversation_type`, `subtitle_text`, `source_url`, `created_at`, `last_accessed_at` |
 | `messages` | `id` (PK), `session_id` (FK), `role`, `content`, `created_at` |
 
 Indexes on `messages(session_id, created_at)` and `sessions(device_id, last_accessed_at)`.
 
 ### 4. External Integrations
 
-* **Bilibili APIs**: Fetches video metadata and subtitle tracks. `BILIBILI_SESSION_TOKEN` (the `SESSDATA` cookie) is required for restricted or high-definition content.
+* **audio-transcript-service**: Companion microservice that downloads audio from Bilibili / Xiaoyuzhou / Snipd and transcribes it via Gemini ASR, returning both the transcript and the real episode/video **title** in its `done` event. The primary transcription path for every source; **required for podcasts**, optional for Bilibili (which can fall back to subtitles). Source detection and any provider API keys (e.g. `SNIPD_API_KEY`) live in the service, not here. Reached at `AUDIO_TRANSCRIBE_SERVICE_URL`.
+* **Bilibili APIs**: Used for the Bilibili-only subtitle fallback and to fetch the Bilibili video title. `BILIBILI_SESSION_TOKEN` (the `SESSDATA` cookie) is required for restricted or high-definition content.
 * **DeepSeek / OpenAI-compatible LLM**: Generates summaries and answers follow-up questions. Configurable via `DEEPSEEK_*` or `OPENAI_COMPATIBLE_*` env vars.
-* **Upstash Redis** *(optional)*: Caches transcript text (both Bilibili subtitles and ASR results) keyed by video ID, with a 7-day TTL. Skipped entirely when credentials are absent.
-* **audio-transcript-service** *(optional)*: A companion microservice that downloads Bilibili audio and transcribes it via Gemini ASR. Used when a video has no official subtitle track. Reached over Tailscale MagicDNS at `AUDIO_TRANSCRIBE_SERVICE_URL`.
+* **Upstash Redis** *(optional)*: Caches transcripts as `{ text, title }` keyed by `<source>:asr:<id>` (and Bilibili subtitles), with a 7-day TTL. Skipped entirely when credentials are absent.
 
 ---
 
 ## Features
 
-- Paste any Bilibili URL — full link (`https://www.bilibili.com/video/BVxxxx`), bare BV ID, or `b23.tv` short link
+- Paste a **Bilibili** URL (full link, bare BV ID, or `b23.tv` short link), a **Xiaoyuzhou** episode URL, or a **Snipd** episode URL
+- Real episode/video titles for every source (resolved by `audio-transcript-service`)
 - Four summary modes: detailed outline, brief outline, summary, Q&A questions
-- Clickable timestamps in the summary that jump to the exact moment in the video
-- Multi-turn chat grounded in the video's actual subtitles
+- Clickable timestamps — jump to the moment in Bilibili; open the episode for podcasts
+- Multi-turn chat grounded in the actual transcript
 - Session history persisted in SQLite — sessions survive server restarts
-- Subtitle caching via Upstash Redis (7-day TTL; optional)
-- Optional audio transcription fallback via `audio-transcript-service` when no subtitle track exists
-- Real-time progress events during subtitle download and transcription
+- Transcript caching via Upstash Redis (7-day TTL; optional)
+- Bilibili-only fallback to the official subtitle track if ASR is unavailable
+- Real-time progress events during audio download and transcription
 
 ---
 
@@ -84,9 +87,9 @@ Indexes on `messages(session_id, created_at)` and `sessions(device_id, last_acce
 
 - Docker + Docker Compose
 - A DeepSeek API key (or any OpenAI-compatible endpoint)
-- _(Optional)_ Upstash Redis for subtitle caching
+- [audio-transcript-service](https://github.com/YANGZ001/audio-trainscript-service) — required for podcasts (Xiaoyuzhou/Snipd) and the primary path for Bilibili; optional only if you use Bilibili exclusively and rely on its subtitle fallback
+- _(Optional)_ Upstash Redis for transcript caching
 - _(Optional)_ Bilibili `SESSDATA` cookie for restricted videos
-- _(Optional)_ [audio-transcript-service](https://github.com/YANGZ001/audio-trainscript-service) for ASR fallback
 
 ### 1. Configure environment
 
@@ -132,19 +135,19 @@ Session data is stored in `./data/chat.db` and persisted via a Docker volume.
 |----------|-------------|
 | `BILIBILI_SESSION_TOKEN` | Value of the `SESSDATA` cookie from bilibili.com — required for restricted or HD videos |
 
-### Optional — Subtitle Cache (Upstash Redis)
+### Optional — Transcript Cache (Upstash Redis)
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `UPSTASH_REDIS_REST_URL` | — | Upstash Redis REST endpoint |
 | `UPSTASH_REDIS_REST_TOKEN` | — | Upstash Redis REST token |
-| `SUBTITLE_REDIS_CACHE_TTL_SECONDS` | `604800` (7 days) | Subtitle cache TTL in seconds |
+| `SUBTITLE_REDIS_CACHE_TTL_SECONDS` | `604800` (7 days) | Transcript/subtitle cache TTL in seconds |
 
-### Optional — Audio Transcription
+### Audio Transcription (required for podcasts)
 
 | Variable | Description |
 |----------|-------------|
-| `AUDIO_TRANSCRIBE_SERVICE_URL` | Base URL of `audio-transcript-service` (e.g. `http://hostname:3001`) |
+| `AUDIO_TRANSCRIBE_SERVICE_URL` | Base URL of `audio-transcript-service` (e.g. `http://hostname:3001`). Required for Xiaoyuzhou/Snipd and the primary path for Bilibili; provider keys like `SNIPD_API_KEY` are configured on the service, not here. |
 
 ### Optional — Database
 

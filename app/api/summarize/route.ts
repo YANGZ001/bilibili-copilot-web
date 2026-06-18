@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
-import { getSubtitleForVideo, getCachedTranscript, resolveShortUrl, extractBvidFromUrl } from '@/lib/bilibili'
+import { getSubtitleForVideo, getCachedTranscript, resolveShortUrl } from '@/lib/bilibili'
+import { detectSource, extractSourceId, sourceLabel } from '@/lib/source'
 import { findTemplate, type PromptTemplate } from '@/lib/prompts'
 import { getLLMConfig } from '@/lib/llm'
 import { readSSEChunks } from '@/lib/streamSSE'
@@ -83,7 +84,7 @@ ${subtitleText}`
   }
 
   // Emit metadata preamble (client switches to summary mode after this)
-  write(JSON.stringify({ videoTitle, subtitleText, videoId }) + '\n===METADATA_END===\n')
+  write(JSON.stringify({ videoTitle, subtitleText, videoId, videoUrl: url }) + '\n===METADATA_END===\n')
 
   try {
     for await (const chunk of readSSEChunks(aiResponse.body)) {
@@ -105,7 +106,14 @@ export async function POST(req: NextRequest) {
     }
 
     const resolvedUrl = await resolveShortUrl(url)
-    const resolvedBvid = extractBvidFromUrl(resolvedUrl) ?? ''
+    const source = detectSource(resolvedUrl)
+    if (!source) {
+      return Response.json(
+        { error: '不支持的链接，请使用 Bilibili、小宇宙 或 Snipd 的链接。' },
+        { status: 400 },
+      )
+    }
+    const sourceId = extractSourceId(resolvedUrl, source)
     const template = findTemplate(templateId || 'outline')
     const serviceUrl = process.env.AUDIO_TRANSCRIBE_SERVICE_URL
 
@@ -115,7 +123,7 @@ export async function POST(req: NextRequest) {
         const write = (s: string) => controller.enqueue(enc.encode(s))
 
         let subtitleText = ''
-        let videoTitle = resolvedBvid
+        let videoTitle = source === 'bilibili' ? sourceId : `${sourceLabel(source)} 单集 · ${sourceId || resolvedUrl}`
 
         if (serviceUrl) {
           // Primary path: audio-transcript-service
@@ -125,8 +133,9 @@ export async function POST(req: NextRequest) {
             const ac = new AbortController()
             const timer = setTimeout(() => ac.abort(), 10 * 60 * 1000)
             try {
-              subtitleText = await getCachedTranscript(
-                resolvedBvid,
+              const asrResult = await getCachedTranscript(
+                source,
+                sourceId,
                 resolvedUrl,
                 (step, progress) => {
                   write(`PROGRESS:${JSON.stringify({ step, progress })}\n`)
@@ -134,6 +143,10 @@ export async function POST(req: NextRequest) {
                 ac.signal,
                 bypassCache,
               )
+              subtitleText = asrResult.text
+              // Podcasts have no title API; use the title the service resolved.
+              // Bilibili keeps its dedicated title fetch below (works on cache hits too).
+              if (source !== 'bilibili' && asrResult.title) videoTitle = asrResult.title
               asrSucceeded = true
             } finally {
               clearTimeout(timer)
@@ -145,41 +158,44 @@ export async function POST(req: NextRequest) {
               controller.close()
               return
             }
-            // Other ASR error: record and fall through to Bilibili
+            // Other ASR error: record it. Bilibili can fall back to subtitles; podcasts cannot.
             asrError = err instanceof Error ? err.message : String(err)
-            console.error('[Transcript] ASR service failed, falling back to Bilibili subtitles:', err)
+            console.error('[Transcript] ASR service failed:', err)
           }
 
           if (asrSucceeded) {
-            // Fetch video title separately (lightweight; transcript service doesn't return it)
-            const sessdata = process.env.BILIBILI_SESSION_TOKEN || ''
-            const titleHeaders: HeadersInit = {
-              'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36',
-              Referer: 'https://www.bilibili.com',
-            }
-            if (sessdata) titleHeaders['Cookie'] = `SESSDATA=${sessdata}`
-            try {
-              const titleAc = new AbortController()
-              const titleTimer = setTimeout(() => titleAc.abort(), 5000)
-              try {
-                const viewRes = await fetch(`https://api.bilibili.com/x/web-interface/view?bvid=${resolvedBvid}`, {
-                  headers: titleHeaders,
-                  signal: titleAc.signal,
-                })
-                if (viewRes.ok) {
-                  const viewJson = await viewRes.json()
-                  if (viewJson.code === 0 && viewJson.data?.title) {
-                    videoTitle = viewJson.data.title as string
-                  }
-                }
-              } finally {
-                clearTimeout(titleTimer)
+            // Bilibili exposes a title API; the transcript service doesn't return one.
+            // Podcasts keep the generic fallback title set above.
+            if (source === 'bilibili') {
+              const sessdata = process.env.BILIBILI_SESSION_TOKEN || ''
+              const titleHeaders: HeadersInit = {
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36',
+                Referer: 'https://www.bilibili.com',
               }
-            } catch {
-              // Non-critical; keep BV ID as fallback title
+              if (sessdata) titleHeaders['Cookie'] = `SESSDATA=${sessdata}`
+              try {
+                const titleAc = new AbortController()
+                const titleTimer = setTimeout(() => titleAc.abort(), 5000)
+                try {
+                  const viewRes = await fetch(`https://api.bilibili.com/x/web-interface/view?bvid=${sourceId}`, {
+                    headers: titleHeaders,
+                    signal: titleAc.signal,
+                  })
+                  if (viewRes.ok) {
+                    const viewJson = await viewRes.json()
+                    if (viewJson.code === 0 && viewJson.data?.title) {
+                      videoTitle = viewJson.data.title as string
+                    }
+                  }
+                } finally {
+                  clearTimeout(titleTimer)
+                }
+              } catch {
+                // Non-critical; keep BV ID as fallback title
+              }
             }
-          } else {
-            // Tell the client we're switching to the Bilibili fallback
+          } else if (source === 'bilibili') {
+            // Tell the client we're switching to the Bilibili subtitle fallback
             write(`PROGRESS:${JSON.stringify({ step: 'fallback' })}\n`)
             const subtitleResult = await getSubtitleForVideo(resolvedUrl, bypassCache)
             if (!subtitleResult.available) {
@@ -192,8 +208,13 @@ export async function POST(req: NextRequest) {
             }
             subtitleText = subtitleResult.text
             videoTitle = subtitleResult.title
+          } else {
+            // Podcasts have no subtitle fallback — surface the ASR error directly.
+            write(`ERROR:${JSON.stringify({ error: `转录失败: ${asrError || '未知错误'}` })}\n`)
+            controller.close()
+            return
           }
-        } else {
+        } else if (source === 'bilibili') {
           // No transcription service configured: Bilibili subtitles only
           const subtitleResult = await getSubtitleForVideo(resolvedUrl, bypassCache)
           if (!subtitleResult.available) {
@@ -203,6 +224,11 @@ export async function POST(req: NextRequest) {
           }
           subtitleText = subtitleResult.text
           videoTitle = subtitleResult.title
+        } else {
+          // Podcasts require the transcription service.
+          write(`ERROR:${JSON.stringify({ error: '未配置转录服务，无法处理该链接。' })}\n`)
+          controller.close()
+          return
         }
 
         await pipeDeepSeek(controller, {
@@ -210,7 +236,7 @@ export async function POST(req: NextRequest) {
           template,
           subtitleText,
           videoTitle,
-          videoId: resolvedBvid,
+          videoId: sourceId,
         })
       },
     })

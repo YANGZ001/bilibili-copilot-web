@@ -291,24 +291,31 @@ export async function getSubtitleForVideo(url: string, bypassCache = false): Pro
   }
 }
 
-// Wraps callTranscribeService with a Redis cache layer (key: bilibili:asr:{bvid}).
+export interface CachedTranscript {
+  text: string
+  title?: string
+}
+
+// Wraps callTranscribeService with a Redis cache layer (key: {source}:asr:{id}).
 // On cache hit returns instantly; on miss calls the service and stores the result.
 export async function getCachedTranscript(
-  bvid: string,
+  source: string,
+  sourceId: string,
   videoUrl: string,
   onProgress: (step: string, progress?: number) => void,
   signal?: AbortSignal,
   bypassCache = false,
-): Promise<string> {
-  const cacheKey = `bilibili:asr:${bvid}`
+): Promise<CachedTranscript> {
+  const cacheKey = `${source}:asr:${sourceId}`
   const cacheTtl = parseInt(process.env.SUBTITLE_REDIS_CACHE_TTL_SECONDS ?? '604800', 10)
 
   if (redis && !bypassCache) {
     try {
-      const cached = await redis.get<string>(cacheKey)
+      const cached = await redis.get<CachedTranscript | string>(cacheKey)
       if (cached) {
         console.log(`[ASR Cache] HIT for key: ${cacheKey}`)
-        return cached
+        // Legacy entries were stored as a bare transcript string (no title).
+        return typeof cached === 'string' ? { text: cached } : cached
       }
       console.log(`[ASR Cache] MISS for key: ${cacheKey}`)
     } catch (err) {
@@ -318,28 +325,29 @@ export async function getCachedTranscript(
     console.log(`[ASR Cache] Bypassing cache read for key: ${cacheKey} (forced refresh)`)
   }
 
-  const text = await callTranscribeService(videoUrl, onProgress, signal)
+  const result = await callTranscribeService(source, videoUrl, onProgress, signal)
 
-  if (text && redis) {
+  if (result.text && redis) {
     try {
-      await redis.set(cacheKey, text, { ex: cacheTtl })
+      await redis.set(cacheKey, result, { ex: cacheTtl })
       console.log(`[ASR Cache] Saved for key: ${cacheKey}`)
     } catch (err) {
       console.error('[ASR Cache] Failed to write to Redis:', err)
     }
   }
 
-  return text
+  return result
 }
 
 // Calls the audio-trainscript-service SSE endpoint and returns the formatted subtitle text.
 // onProgress is called for each downloading/uploading/transcribing event.
 // signal can be used to abort (e.g. 10-minute timeout).
 export async function callTranscribeService(
+  source: string,
   videoUrl: string,
   onProgress: (step: string, progress?: number) => void,
   signal?: AbortSignal,
-): Promise<string> {
+): Promise<CachedTranscript> {
   const serviceUrl = process.env.AUDIO_TRANSCRIBE_SERVICE_URL
   if (!serviceUrl) throw new Error('AUDIO_TRANSCRIBE_SERVICE_URL is not configured')
 
@@ -347,7 +355,7 @@ export async function callTranscribeService(
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ type: 'bilibili', url: videoUrl }),
+    body: JSON.stringify({ type: source, url: videoUrl }),
     signal,
   })
 
@@ -386,7 +394,7 @@ export async function callTranscribeService(
             onProgress('transcribing')
           } else if (pendingEvent === 'done') {
             if (typeof data?.text !== 'string') throw new Error('Invalid done payload from transcribe service')
-            return data.text
+            return { text: data.text, title: typeof data.title === 'string' && data.title ? data.title : undefined }
           } else if (pendingEvent === 'error') {
             throw new Error(data.error || 'Transcription service error')
           }

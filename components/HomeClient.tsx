@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { defaultTemplates, findTemplate } from '@/lib/prompts'
+import { detectSource } from '@/lib/source'
 import { getOrCreateDeviceId } from '@/lib/device'
 import { useSession, type ChatMessage } from '@/hooks/useSession'
 import SummaryViewer from '@/components/SummaryViewer'
@@ -21,12 +22,12 @@ interface ActiveContext {
 function asrStepMessage(step: string, progress?: number): string {
   if (step === 'downloading') {
     return progress != null
-      ? `正在从 B站 下载音频... ${progress}%`
-      : '正在从 B站 下载音频...'
+      ? `正在下载音频... ${progress}%`
+      : '正在下载音频...'
   }
   if (step === 'uploading') return '正在上传音频到 Gemini，请稍候...'
   if (step === 'transcribing') return '正在 AI 转录音频，请耐心等待（约需 1-5 分钟）...'
-  if (step === 'fallback') return '转录服务异常，正在回退 B站 字幕...'
+  if (step === 'fallback') return '转录服务异常，正在回退字幕...'
   return '正在转录...'
 }
 
@@ -77,13 +78,13 @@ export default function HomeClient() {
     e.preventDefault()
     if (!url.trim() || isLoading) return
 
-    const submittedUrl = url.trim()
-    const looksLikeBilibili =
-      /bilibili\.com\/video\/BV/i.test(submittedUrl) ||
-      /^BV[a-zA-Z0-9]+$/.test(submittedUrl) ||
-      /b23\.tv\//i.test(submittedUrl)
-    if (!looksLikeBilibili) {
-      setError('请输入有效的 B站 视频链接（包含 /video/BV...）或 BV 号。')
+    let submittedUrl = url.trim()
+    // Normalize a bare BV id to a full Bilibili URL so source detection works.
+    if (/^BV[a-zA-Z0-9]+$/.test(submittedUrl)) {
+      submittedUrl = `https://www.bilibili.com/video/${submittedUrl}`
+    }
+    if (detectSource(submittedUrl) === null) {
+      setError('请输入有效的视频或播客链接（支持 Bilibili / 小宇宙 / Snipd）。')
       return
     }
 
@@ -95,6 +96,7 @@ export default function HomeClient() {
     let resolvedVideoTitle = ''
     let resolvedSubtitleText = ''
     let resolvedVideoId = ''
+    let resolvedVideoUrl = submittedUrl
     let currentSummary = ''
 
     try {
@@ -157,9 +159,10 @@ export default function HomeClient() {
 
             try {
               const metadata = JSON.parse(metaJson)
-              resolvedVideoTitle = metadata.videoTitle || 'Bilibili 视频'
+              resolvedVideoTitle = metadata.videoTitle || '未命名'
               resolvedSubtitleText = metadata.subtitleText || ''
               resolvedVideoId = metadata.videoId || ''
+              resolvedVideoUrl = metadata.videoUrl || submittedUrl
             } catch (err) {
               console.error('Error parsing metadata from stream', err)
             }
@@ -169,7 +172,7 @@ export default function HomeClient() {
             setStatusMessage('')
             setActiveContext({
               videoTitle: resolvedVideoTitle,
-              videoUrl: submittedUrl,
+              videoUrl: resolvedVideoUrl,
               summary: currentSummary,
               sessionId: '',
               chatMessages: [],
@@ -199,6 +202,7 @@ export default function HomeClient() {
           video_title: resolvedVideoTitle,
           conversation_type: templateId,
           subtitle_text: resolvedSubtitleText,
+          source_url: resolvedVideoUrl,
           messages: [
             { role: 'user', content: selectedTemplate.instruction },
             { role: 'assistant', content: currentSummary },
@@ -377,14 +381,14 @@ export default function HomeClient() {
         {/* Header */}
         <header className="text-center mb-10 mt-6 sm:mt-10">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-semibold mb-4 tracking-wide uppercase">
-            ⚡️ Private & High-Efficiency Bilibili Agent
+            ⚡️ Private & High-Efficiency Audio/Video Agent
           </div>
           <h1 className="text-4xl sm:text-5xl font-black tracking-tight text-white mb-3">
-            B站 AI <span className="bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">视频课代表</span>
+            AI <span className="bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">音视频课代表</span>
           </h1>
           <p className="text-slate-400 max-w-xl mx-auto text-sm sm:text-base leading-relaxed">
-            基于 deepseek 极速生成视频完整大纲，告别随机丢弃和信息丢失。
-            支持多轮深度追问，完美还原视频的每一处细节。
+            基于 deepseek 极速生成音视频完整大纲，告别随机丢弃和信息丢失。
+            支持多轮深度追问，完美还原内容的每一处细节。
           </p>
         </header>
 
@@ -416,7 +420,7 @@ export default function HomeClient() {
               <form onSubmit={handleSummarize} className="space-y-4">
                 <div>
                   <label htmlFor="video-url" className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">
-                    视频链接 (支持 BV号 / 网页地址 / b23.tv 短链)
+                    链接 (支持 Bilibili / 小宇宙 / Snipd，含 BV号 / b23.tv 短链)
                   </label>
                   <div className="flex flex-col sm:flex-row gap-3">
                     <input
@@ -426,7 +430,7 @@ export default function HomeClient() {
                       disabled={isLoading}
                       value={url}
                       onChange={(e) => setUrl(e.target.value)}
-                      placeholder="例如: https://www.bilibili.com/video/BV1fX4y1Q7Ux"
+                      placeholder="例如: https://www.bilibili.com/video/BV1fX4y1Q7Ux 或 https://www.xiaoyuzhoufm.com/episode/..."
                       className="flex-1 px-4 py-3.5 bg-slate-950/60 border border-slate-800 hover:border-slate-700/60 focus:border-indigo-500 rounded-xl text-slate-200 placeholder:text-slate-500 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all disabled:opacity-50"
                     />
                     <button
@@ -534,7 +538,7 @@ export default function HomeClient() {
                   rel="noreferrer"
                   className="text-xs text-indigo-400 hover:text-indigo-300 font-semibold transition-colors flex items-center gap-1.5"
                 >
-                  <span>在 B站 播放</span>
+                  <span>打开原链接</span>
                   <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
                 </a>
                 <button

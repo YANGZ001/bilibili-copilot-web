@@ -10,7 +10,7 @@ export const defaultTemplates: PromptTemplate[] = [
     id: 'outline',
     name: '总结大纲',
     description: '按时间线生成详细分层大纲。',
-    instruction: `请根据下面的 Bilibili 视频字幕生成非常详细的 Markdown 总结大纲。
+    instruction: `请根据下面的音视频字幕生成非常详细的 Markdown 总结大纲。
 
 要求：
 1. 用中文回答，内容必须具体、可复查，不能只写泛泛的标题。
@@ -34,7 +34,7 @@ export const defaultTemplates: PromptTemplate[] = [
     id: 'brief-outline',
     name: '简略大纲',
     description: '生成较短的核心大纲和小纲。',
-    instruction: `请根据下面的 Bilibili 视频字幕生成简略 Markdown 总结大纲。
+    instruction: `请根据下面的音视频字幕生成简略 Markdown 总结大纲。
 
 要求：
 1. 用中文回答，重点抓核心结构，不要展开成长篇总结。
@@ -56,7 +56,7 @@ export const defaultTemplates: PromptTemplate[] = [
     id: 'summary',
     name: '总结视频',
     description: '提炼核心观点、结构和结论。',
-    instruction: `请根据下面的 Bilibili 视频字幕生成结构化 Markdown 总结。
+    instruction: `请根据下面的音视频字幕生成结构化 Markdown 总结。
 
 要求：
 1. 用中文回答。
@@ -76,7 +76,7 @@ export const defaultTemplates: PromptTemplate[] = [
     id: 'questions',
     name: '生成问题',
     description: '根据字幕创建理解题和讨论题。',
-    instruction: `请根据下面的 Bilibili 视频字幕生成 Markdown 格式的问题清单。
+    instruction: `请根据下面的音视频字幕生成 Markdown 格式的问题清单。
 
 要求：
 1. 必须使用下面的结构：

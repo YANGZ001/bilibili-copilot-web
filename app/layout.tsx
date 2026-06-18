@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "B站 AI 视频课代表",
-  description: "基于 AI 极速生成 Bilibili 视频大纲，支持多轮深度追问。",
+  title: "AI 音视频课代表",
+  description: "基于 AI 极速生成音视频大纲，支持多轮深度追问。",
 };
 
 export default function RootLayout({
