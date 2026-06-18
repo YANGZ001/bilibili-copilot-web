@@ -10,7 +10,7 @@ export const defaultTemplates: PromptTemplate[] = [
     id: 'outline',
     name: '时间线大纲',
     description: '按时间线生成详细分层大纲。',
-    instruction: `请根据下面的音视频字幕生成非常详细的 Markdown 总结大纲。
+    instruction: `请根据下面的音视频字幕生成非常详细的 Markdown 时间线大纲。
 
 要求：
 1. 用中文回答，内容必须具体、可复查，不能只写泛泛的标题。
@@ -46,7 +46,7 @@ export const defaultTemplates: PromptTemplate[] = [
 3. 核心结论：3-5 条最重要的观点或结论，直接可引用，不加时间戳。
 4. 关键概念：解释音视频中出现的重要概念、术语或框架，每条聚焦一个概念。
 5. 可追问问题：列出 3-5 个值得深入探讨的问题。
-6. 不要输出时间线大纲——时间线由「总结大纲」负责。
+6. 不要输出时间线大纲——时间线由「时间线大纲」负责。
 7. 不要输出 JSON，不要使用表格。`,
   },
   {
