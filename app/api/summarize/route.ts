@@ -30,7 +30,7 @@ async function pipeDeepSeek(
   }
 
   const systemPrompt = [
-    '你是一个严谨的视频字幕分析助手。回答要清晰、具体、可复查。',
+    '你是一个严谨的音视频字幕分析助手。回答要清晰、具体、可复查。',
     '请严格使用 Markdown 输出。',
     '时间戳只能使用 [MM:SS]、[HH:MM:SS] 或 [MM:SS-MM:SS] 形式。',
     '时间戳必须对应字幕中真实出现的内容，不要编造不存在的时间点。',
@@ -38,8 +38,8 @@ async function pipeDeepSeek(
 
   const userPrompt = `${template.instruction}
 
-视频标题：${videoTitle}
-视频地址：${url}
+音视频标题：${videoTitle}
+音视频地址：${url}
 
 字幕如下：
 
@@ -102,7 +102,7 @@ export async function POST(req: NextRequest) {
     const { url, templateId, bypassCache } = await req.json()
 
     if (!url) {
-      return Response.json({ error: '请提供视频链接。' }, { status: 400 })
+      return Response.json({ error: '请提供音视频链接。' }, { status: 400 })
     }
 
     const resolvedUrl = await resolveShortUrl(url)
@@ -154,7 +154,7 @@ export async function POST(req: NextRequest) {
           } catch (err: unknown) {
             if (err instanceof Error && err.name === 'AbortError') {
               // Timeout is unambiguous — surface it immediately, don't try Bilibili
-              write(`ERROR:${JSON.stringify({ error: '转录超时（已超过 10 分钟），请重试或选择更短的视频。' })}\n`)
+              write(`ERROR:${JSON.stringify({ error: '转录超时（已超过 10 分钟），请重试或选择更短的音视频。' })}\n`)
               controller.close()
               return
             }

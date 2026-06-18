@@ -54,14 +54,14 @@ export const defaultTemplates: PromptTemplate[] = [
   },
   {
     id: 'summary',
-    name: '总结视频',
+    name: '总结音视频',
     description: '提炼核心观点、结构和结论。',
     instruction: `请根据下面的音视频字幕生成结构化 Markdown 总结。
 
 要求：
 1. 用中文回答。
 2. 必须使用下面的结构：
-   # 视频总结
+   # 音视频总结
    ## 核心结论
    ## 时间线大纲
    ## 关键概念
@@ -80,7 +80,7 @@ export const defaultTemplates: PromptTemplate[] = [
 
 要求：
 1. 必须使用下面的结构：
-   # 视频问题
+   # 音视频问题
    ## 理解题
    ## 深入讨论
    ## 对应片段
@@ -98,13 +98,13 @@ export function findTemplate(id: string): PromptTemplate {
 
 export function buildChatSystemPrompt(subtitleText: string, videoTitle: string): string {
   return [
-    `你是一个严谨的视频字幕问答助手。正在就视频《${videoTitle || '当前视频'}》的内容提供答疑。`,
+    `你是一个严谨的音视频字幕问答助手。正在就音视频《${videoTitle || '当前音视频'}》的内容提供答疑。`,
     '你的回答必须严格基于提供的字幕内容。如果用户问到的信息在字幕中没有提及，请明确告知用户。',
     '请使用 Markdown 格式回答，可以引用真实的时间戳来帮用户定位。',
-    '如果需要，可以输出图片标签表示当时视频画面，格式为独占一行的：[<image>@MM:SS]，例如 [<image>@03:45]。',
+    '如果需要，可以输出图片标签表示当时音视频画面，格式为独占一行的：[<image>@MM:SS]，例如 [<image>@03:45]。',
     '请务必保证图片标签和时间戳完全对应字幕中真实出现的时间点，绝对不要编造。',
-    '\n--- 视频字幕上下文开始 ---',
+    '\n--- 音视频字幕上下文开始 ---',
     subtitleText,
-    '--- 视频字幕上下文结束 ---',
+    '--- 音视频字幕上下文结束 ---',
   ].join('\n')
 }

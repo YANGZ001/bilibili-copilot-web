@@ -167,7 +167,7 @@ export default function VideoChat({ videoUrl, sessionId, initialMessages }: Vide
       <div className="flex items-center justify-between px-5 py-4 bg-slate-950/30 border-b border-slate-800/50">
         <div className="flex items-center gap-2">
           <span className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse"></span>
-          <h4 className="text-sm font-semibold text-slate-200">视频 AI 课代表 答疑室</h4>
+          <h4 className="text-sm font-semibold text-slate-200">音视频 AI 课代表 答疑室</h4>
         </div>
         <button
           onClick={handleClear}
@@ -190,7 +190,7 @@ export default function VideoChat({ videoUrl, sessionId, initialMessages }: Vide
             </div>
             <p className="text-sm font-medium text-slate-300">对总结内容不解？</p>
             <p className="text-xs text-slate-500 mt-1 max-w-[240px]">
-              可以直接向 AI 提出有关视频的任何具体问题，课代表会根据原文字幕为你解答。
+              可以直接向 AI 提出有关音视频的任何具体问题，课代表会根据原文字幕为你解答。
             </p>
           </div>
         ) : (
@@ -236,7 +236,7 @@ export default function VideoChat({ videoUrl, sessionId, initialMessages }: Vide
             value={input}
             onChange={(e) => setInput(e.target.value)}
             disabled={isLoading}
-            placeholder={isLoading ? 'AI 正在思考...' : '向课代表继续提问视频细节...'}
+            placeholder={isLoading ? 'AI 正在思考...' : '向课代表继续提问音视频细节...'}
             className="w-full pl-4 pr-12 py-3 bg-slate-950/40 border border-slate-800 hover:border-slate-700/60 focus:border-indigo-500 rounded-xl text-slate-200 placeholder:text-slate-500 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all disabled:opacity-50"
           />
           <button

@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (!subtitleText) {
-      return Response.json({ error: '缺少视频字幕上下文，请先进行视频总结。' }, { status: 400 })
+      return Response.json({ error: '缺少音视频字幕上下文，请先进行音视频总结。' }, { status: 400 })
     }
 
     const { apiKey, chatEndpoint, model } = getLLMConfig()
