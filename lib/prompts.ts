@@ -8,7 +8,7 @@ export interface PromptTemplate {
 export const defaultTemplates: PromptTemplate[] = [
   {
     id: 'outline',
-    name: '总结大纲',
+    name: '时间线大纲',
     description: '按时间线生成详细分层大纲。',
     instruction: `请根据下面的音视频字幕生成非常详细的 Markdown 总结大纲。
 
@@ -33,21 +33,20 @@ export const defaultTemplates: PromptTemplate[] = [
   {
     id: 'summary',
     name: '总结音视频',
-    description: '提炼核心观点、结构和结论。',
-    instruction: `请根据下面的音视频字幕生成结构化 Markdown 总结。
+    description: '提炼核心结论、关键概念与可追问问题，侧重理解而非结构。',
+    instruction: `请根据下面的音视频字幕生成以理解为导向的 Markdown 总结。
 
 要求：
 1. 用中文回答。
-2. 必须使用下面的结构：
+2. 必须使用下面的结构（禁止添加时间线大纲）：
    # 音视频总结
    ## 核心结论
-   ## 时间线大纲
    ## 关键概念
    ## 可追问问题
-3. 时间线大纲必须从头到尾 organization 成章节，每个章节标题必须以时间戳开头，例如：### [02:15] 标题。
-4. 所有时间点必须使用 [MM:SS] 或 [HH:MM:SS] 格式；时间范围可使用 [MM:SS-MM:SS]。
-5. 如果某个章节适合展示关键画面，可在该章节标题下方单独输出一行图片标签，例如：[<image>@02:18]。
-6. 图片标签必须独占一行，每个章节最多 1 个，全文最多 4 个。
+3. 核心结论：3-5 条最重要的观点或结论，直接可引用，不加时间戳。
+4. 关键概念：解释音视频中出现的重要概念、术语或框架，每条聚焦一个概念。
+5. 可追问问题：列出 3-5 个值得深入探讨的问题。
+6. 不要输出时间线大纲——时间线由「总结大纲」负责。
 7. 不要输出 JSON，不要使用表格。`,
   },
   {
