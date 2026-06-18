@@ -1,4 +1,5 @@
 import { Redis } from '@upstash/redis'
+import type { Source } from '@/lib/source'
 
 // Initialize Upstash Redis client if env variables are provided
 let redis: Redis | null = null
@@ -299,7 +300,7 @@ export interface CachedTranscript {
 // Wraps callTranscribeService with a Redis cache layer (key: {source}:asr:{id}).
 // On cache hit returns instantly; on miss calls the service and stores the result.
 export async function getCachedTranscript(
-  source: string,
+  source: Source,
   sourceId: string,
   videoUrl: string,
   onProgress: (step: string, progress?: number) => void,
@@ -343,7 +344,7 @@ export async function getCachedTranscript(
 // onProgress is called for each downloading/uploading/transcribing event.
 // signal can be used to abort (e.g. 10-minute timeout).
 export async function callTranscribeService(
-  source: string,
+  source: Source,
   videoUrl: string,
   onProgress: (step: string, progress?: number) => void,
   signal?: AbortSignal,

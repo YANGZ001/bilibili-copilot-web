@@ -55,5 +55,4 @@ Per-source cache keys (`${source}:asr:${id}`) verified in code; Bilibili stays
 
 ## Links
 
-- Plan file: `~/.claude/plans/dapper-zooming-book.md`
 - Service detection source of truth: `../audio-trainscript-service/src/services/transcribePipeline.ts`
