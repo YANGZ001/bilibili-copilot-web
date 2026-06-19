@@ -6,6 +6,9 @@ A self-hosted tool that turns a **Bilibili video**, **Xiaoyuzhou (小宇宙)** p
 
 ## System Architecture
 
+![System Architecture](./public/assets/architecture.jpg)
+*(Architecture illustration generated in [Ian Xiaohei style](https://github.com/helloianneo/ian-xiaohei-illustrations/tree/main))*
+
 ```mermaid
 flowchart LR
     Browser["Browser\n(React UI)"]
