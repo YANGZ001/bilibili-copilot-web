@@ -8,6 +8,8 @@ All new features use [OpenSpec](https://github.com/Fission-AI/OpenSpec). Before 
 
 Legacy feature docs live under `repo_root/docs/<feature-name>/` and are kept for reference only — do not create new ones there.
 
+* **Branch & PR Constraint**: Never commit directly to `master`, `main`, or other default branches. Always create a separate branch for changes, push it, and create a Pull Request (PR) for review and merge.
+
 ---
 
 ## Decision Ownership
