@@ -9,30 +9,6 @@ A self-hosted tool that turns a **Bilibili video**, **Xiaoyuzhou (小宇宙)** p
 ![System Architecture](./public/assets/architecture.jpg)
 *(Architecture illustration generated in [Ian Xiaohei style](https://github.com/helloianneo/ian-xiaohei-illustrations/tree/main))*
 
-```mermaid
-flowchart LR
-    Browser["Browser\n(React UI)"]
-
-    subgraph App ["bilibili-copilot-web (Docker)"]
-        API["Next.js API Routes"]
-        SQLite[("SQLite")]
-        API <--> SQLite
-    end
-
-    Sources["Bilibili / Xiaoyuzhou / Snipd"]
-    ASR["audio-transcript-service\n(ASR + title)"]
-    BiliAPI["Bilibili subtitle API\n(fallback, Bilibili only)"]
-    LLM["LLM\n(DeepSeek / OpenAI)"]
-    Redis[("Redis\n(transcript cache, optional)")]
-
-    Browser -->|"HTTP / SSE"| API
-    API --> ASR
-    ASR --> Sources
-    API --> BiliAPI
-    API <--> Redis
-    API --> LLM
-```
-
 ---
 
 ## Component Overviews
