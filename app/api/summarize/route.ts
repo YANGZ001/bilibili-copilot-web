@@ -114,7 +114,7 @@ export async function POST(req: NextRequest) {
       )
     }
     const sourceId = extractSourceId(resolvedUrl, source)
-    const template = findTemplate(templateId || 'outline')
+    const template = findTemplate(templateId || 'summary')
     const serviceUrl = process.env.AUDIO_TRANSCRIBE_SERVICE_URL
 
     const stream = new ReadableStream<Uint8Array>({

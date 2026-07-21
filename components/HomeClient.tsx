@@ -44,7 +44,7 @@ export default function HomeClient() {
   const { sessionId, session, loading: sessionLoading, expired } = useSession()
 
   const [url, setUrl] = useState('')
-  const [templateId, setTemplateId] = useState('outline')
+  const [templateId, setTemplateId] = useState('summary')
   const [isLoading, setIsLoading] = useState(false)
   const [statusMessage, setStatusMessage] = useState('')
   const [error, setError] = useState('')
