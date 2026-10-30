@@ -4,7 +4,7 @@
 
 No test framework is installed. Requires adding Vitest (or Jest) to devDependencies and a minimal config before writing the files below.
 
-### Test files to create (scenarios defined in `docs/security-hardening/tests.md`)
+### Test files to create (scenarios in `git show 039d019:docs/archive/security-hardening/tests.md`)
 
 - [ ] `lib/__tests__/streamSSE.test.ts` — buffer handling, `[DONE]` skip, partial lines, empty lines
 - [ ] `lib/__tests__/llm.test.ts` — env var precedence, trailing-slash strip, model default
